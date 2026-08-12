@@ -9,6 +9,80 @@ what comes next.
 
 ---
 
+## 12 August 2026 — Session 3: Schedule fixed, hosting settled
+
+### What happened
+
+**Clock confirmed at 40 hours remaining.** No hosting accounts existed, so the stack was
+re-planned around what is actually free — which removed a component rather than adding work.
+
+Budget: 40 wall-clock hours − 7 sleep − 2 meals and breaks = **31 effective hours**, split
+21.6 build / 7.0 documentation / 2.4 buffer. Buffer is 6%, which is thin; it is only survivable
+because the cut list is agreed in advance.
+
+**Tier 0 (lean) selected.** Tiers 1 and 2 are not attempted.
+
+Verified two hosting facts by search rather than assumption, both of which changed the plan:
+
+- **Neon** free tier supports PostGIS via `CREATE EXTENSION postgis`. 0.5 GB, 100
+  compute-hours/month, no card, never expires. Confirmed suitable.
+- **Render** free web services sleep after **15 minutes** idle and take **30–60 seconds** to
+  wake, on 512 MB RAM and 0.1 CPU.
+
+Both findings produced decisions:
+
+- **D-012 — Vercel dropped.** The front end is one static page; FastAPI serves it via
+  `StaticFiles`. Removes an account, a deploy target, a build pipeline and all CORS setup.
+- **D-013 — outbox worker runs in-process** as an asyncio task, because Render's free tier
+  permits one service and a separate worker is paid. A real compromise forced by a real
+  constraint, and one of the strongest debt entries available.
+- **D-014 — Render cold start accepted and disclosed**, mitigated by a 10-minute keep-warm ping
+  and an explicit note to the examiner. The risk is that a grader assumes the app is broken; the
+  fix is disclosure, not money.
+
+Wrote `docs/07-build-schedule.md`: hour-by-hour plan across all 40 hours, protected tasks
+marked, cut triggers with thresholds, pre-hour-zero checklist, and the build order within the
+code.
+
+### Where things stand
+
+**Schedule is fixed and the first move is unambiguous:** create three accounts (~15 min), then
+scaffold and deploy an *empty* application by hour 2.5. Deployment is pass-or-fail for 3 marks
+and is the largest single risk in a 48-hour build — it gets retired first, while there is time
+to fix it.
+
+**Protected work, 13.6 hours, may not be cut under any circumstance:** B04 report intake with
+transactional outbox (3.6), B05 spatio-temporal clustering (4.5), B19a order-independence
+property test (1.5), B06 confidence with decay (1.5), B09 outbox worker with idempotency (2.5).
+
+**Cut order agreed** at five thresholds, checked at hours 13, 25 and 31. If behind, cut without
+re-deliberating. Every cut taken goes into the debt register with its cause — worth 6 marks, and
+a documented cut reads completely differently from an unfinished feature.
+
+**Still no code**, and that remains correct. Hour 0 has not started.
+
+### Unresolved
+
+1. **Student ID and project title** still not recorded — needed for the submission package.
+2. **Clustering parameters** still unset. Provisional: 300 m and 30 minutes, varying by type —
+   flooding needs a wider radius than a collision. Must be fixed before B05 at hour 8.6.
+3. **Sleep block placement.** The schedule puts it at hours 18–25; slide it to match the actual
+   night. Do not skip it — the 6% buffer assumes a rested developer for B09 onwards.
+4. Neon and Render accounts unverified. If either fails, that must surface in the first 15
+   minutes, not at hour 30.
+
+### Next actions, in order
+
+1. **Fifteen-minute pre-flight:** GitHub repo → Neon project + `CREATE EXTENSION postgis` →
+   Render free web service → save connection string → record student ID and project title
+2. Fix the clustering distance and time window, with written justification
+3. Start hour 0: B01 scaffold, then **deploy the empty application before writing any feature
+   code**
+4. Open `08-technical-debt.md` before the first shortcut is taken, not after
+5. Then follow `docs/07-build-schedule.md` §3 exactly
+
+---
+
 ## 12 August 2026 — Session 2: Effort estimation
 
 ### What happened

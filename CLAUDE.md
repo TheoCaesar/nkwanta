@@ -87,9 +87,13 @@ Explained properly, in plain language: `docs/04-advanced-concept.md`
 | Backend | Python, FastAPI |
 | Database | PostgreSQL with PostGIS (location data) |
 | ORM / migrations | SQLAlchemy + Alembic |
-| Frontend | React (Vite), MapLibre GL for maps |
+| Frontend | One static HTML page, MapLibre GL, served by FastAPI via `StaticFiles` |
 | Tests | pytest, plus **Hypothesis** for property-based tests |
-| Hosting | Render (API) + Neon (database) + Vercel (frontend) |
+| Hosting | Neon (database) + Render (API and page). **No Vercel** — see D-012. |
+
+The outbox worker runs **in-process** as an asyncio task, not as a separate service, because
+Render's free tier permits only one. This is deliberate, forced by the platform, and recorded
+as technical debt — see D-013. Do not "fix" it.
 
 Hypothesis is not optional. The order-independence property test is the centrepiece of
 the testing section and is worth real marks.

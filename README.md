@@ -40,6 +40,7 @@ section, then [`CLAUDE.md`](CLAUDE.md).
 | [`docs/04-advanced-concept.md`](docs/04-advanced-concept.md) | The advanced concept, explained without jargon |
 | [`docs/05-decision-log.md`](docs/05-decision-log.md) | Every significant choice, dated, with reasoning |
 | [`docs/06-effort-estimation.md`](docs/06-effort-estimation.md) | Use Case Points and bottom-up estimate, and the cuts they forced |
+| [`docs/07-build-schedule.md`](docs/07-build-schedule.md) | Hour-by-hour plan for the remaining clock, with cut triggers |
 
 ---
 
@@ -111,8 +112,11 @@ Details: [`docs/02-problem-and-scope.md`](docs/02-problem-and-scope.md)
 
 ## Stack
 
-Python · FastAPI · PostgreSQL with PostGIS · SQLAlchemy · Alembic · React with Vite ·
-MapLibre GL · pytest with Hypothesis · Render + Neon + Vercel.
+Python · FastAPI · PostgreSQL with PostGIS · SQLAlchemy · Alembic · a single static page with
+MapLibre GL served by FastAPI · pytest with Hypothesis · Neon + Render.
+
+Vercel and React were both dropped once the effort estimate reduced the front end to one page —
+see D-012.
 
 ---
 

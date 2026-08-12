@@ -265,7 +265,10 @@ one would be the actual error.
 1. One developer, working alone, no team communication overhead.
 2. Python is fluent; FastAPI, PostGIS and event-driven patterns are new — reflected in E8 and
    in the per-task learning multipliers.
-3. Hosting accounts on Render, Neon and Vercel exist and are verified before the build starts.
+3. ~~Hosting accounts on Render, Neon and Vercel exist and are verified before the build
+   starts.~~ **Superseded 12 Aug 2026:** no accounts existed. Vercel was dropped entirely
+   (D-012); the stack is now Neon + Render only, and account creation is scheduled as the
+   first 45 minutes of the build. See [`07-build-schedule.md`](07-build-schedule.md) §2.
 4. No real SMS or push provider is integrated. Notifications are written to a log, which
    demonstrates the outbox and idempotency mechanics without a paid dependency.
 5. Seed data is authored by hand; no live traffic feed exists to import.
