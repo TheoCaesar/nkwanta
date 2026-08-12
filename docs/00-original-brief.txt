@@ -1,0 +1,16 @@
+so I have got two fields of interest I will like to pursue for this exam and possibly build on later on. 
+
+for the users of the system:
+emergency services, motor transport & traffic divisions of police, motorists
+
+
+Ghana has an urban traffic problem with way too many private cars, trucks & motor bikes, moderate commercial transport(motorbikes (Okada), ridesharing (uber, bolt & yango), taxis, minibuses & vans(trotro)) and less subsidized public owned transports like buses and less than 5 trains in the urban areas that could have eased the traffic situation.
+For this reason, especially during rush hour there tends to be bumper to bumper traffic often on one side of the carriage way in the mornings and then on the other route at night.
+there are other causes of the said traffic, like act of God(flood, rain), road accidents and some other maintenance disruptions among others that impede the flow of traffic. 
+there are also flagrant abuse of traffic regulations by road users (pedestrians, passengers and motorists) that may contribute to the issue no matter how small the impact. 
+For this area, the app may: 
+* allow users notify other users of the system of any impediments to the flow of traffic, so commuters or pedestrinas behind or yet to set out are in the know and are rerouted accordingly.
+* users should have access to emergency services on the system to report any emergency services and abusers of road regulations. also teher are frequent disruptions to electricity that warrants the need for traffic wardens to be in certain positions to direct flow of traffic. passengers are also taken advantage of during rush hour by trotro drivers by breaking up their frequent routes into smaller chunk of trips, with passengers having to pay 2x as much to get to their destination. such drivers with their cars should be flagged and reated for other passengers to know and also possibly reported to authorities stationed along routes. 
+* some maintanince reports by users of the road too should be possible 
+* lastly coupled with the road traffic is human traffic, while roads are clodgged, passengers get stuck at bustops in their numbers, with some private cars and load carrying trucks sometimes offering rides to stranded commuters. some offer rides in exchange for fares while others do so for free. 
+* Some trotro and taxis offers subscription based services within specific times of the day.
