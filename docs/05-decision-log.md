@@ -9,6 +9,66 @@ Format: what was decided, what else was considered, why, and what it costs.
 
 ---
 
+## 13 August 2026 — B08 lifecycle and reputation
+
+### D-025 — Reputation is a Beta posterior, not a success ratio
+
+**Decided:** `reputation = (confirmed + 2) / (confirmed + contradicted + 4)`, floored at
+0.02 and capped at 0.98. Updated only when an incident is resolved, once per reporter
+regardless of how many reports they filed.
+
+**Considered:** a plain success ratio; a fixed increment per outcome; leaving reputation
+static as it had been.
+
+**Why:** A plain ratio gives 1.0 after one confirmed report and 0.0 after one
+contradiction. The first is an attack — file one true report, become fully trusted, then
+fabricate. The second is unjust, since a road can genuinely clear before a warden
+arrives. The prior removes both: one confirmation moves a new account from 0.50 to 0.60,
+and reaching 0.9 takes roughly eighteen.
+
+The floor exists because a reporter at exactly zero could never recover — every report
+would carry zero weight, so none could ever be confirmed. A trap with no exit.
+
+Counting distinct reporters rather than reports stops spamming from being the fastest
+route to a high reputation.
+
+**Costs.** The prior weight of 2 is another constant fitted to no data (TD-04). Trust is
+lost faster than it is gained by construction, which is intended — the cost of a false
+report must exceed the benefit of a true one — but it does mean an unlucky reporter is
+penalised for a road that cleared before anyone arrived.
+
+---
+
+### D-024 — The lifecycle is a table of rules, not checks in handlers
+
+**Decided:** Legal transitions live in one dictionary keyed by action, each entry naming
+the states it may start from, the state it produces and the roles permitted. Anything
+absent is refused.
+
+**Considered:** conditional checks inside each route handler, which is the usual approach.
+
+**Why:** Scattered checks are how the third handler someone adds becomes the one that
+forgets. A table makes illegal moves unrepresentable rather than merely guarded, and it
+makes the machine readable in one screen — a state machine you have to reconstruct from
+five handlers is one nobody will reason about correctly.
+
+The same table drives the interface through `allowed_actions`, so a button that would be
+refused is never offered. A property test asserts the two agree for every combination of
+state, action and role.
+
+Two constraints are worth stating separately because they encode policy rather than
+mechanics. **An unverified incident cannot be assigned** — otherwise the escalation
+threshold is decoration. **An incident nobody was sent to cannot be resolved** —
+otherwise the queue can be cleared by wishful thinking, and resolution stops being usable
+as evidence about the reporters.
+
+**Costs.** One more module, and the per-incident check that a warden may only resolve
+what they were assigned lives in the service rather than the table, because it depends on
+the specific incident rather than the state. That split is a small inconsistency and is
+documented where it occurs.
+
+---
+
 ## 13 August 2026 — B06 confidence
 
 ### D-023 — Confidence combines evidence with noisy-OR, not a sum

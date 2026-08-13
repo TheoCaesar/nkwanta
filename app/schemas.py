@@ -16,6 +16,7 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from app.lifecycle import Resolution
 from app.models import IncidentStatus, IncidentType, UserRole
 
 
@@ -138,6 +139,40 @@ class IncidentResponse(BaseModel):
 
 class IncidentDetailResponse(IncidentResponse):
     evidence: list[EvidenceResponse]
+    allowed_actions: list[str] = []
+
+
+# --- dispatch -----------------------------------------------------------------
+
+
+class AssignRequest(BaseModel):
+    warden_id: uuid.UUID
+
+
+class ResolveRequest(BaseModel):
+    resolution: Resolution
+    note: str | None = Field(default=None, max_length=500)
+
+
+class ReputationChange(BaseModel):
+    user_id: uuid.UUID
+    display_name: str
+    reputation: float
+    reports_confirmed: int
+    reports_contradicted: int
+
+
+class ResolveResponse(BaseModel):
+    incident: IncidentResponse
+    reputations_updated: list[ReputationChange]
+
+
+class WardenResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    display_name: str
+    reputation: float
 
 
 class ReportAccepted(BaseModel):

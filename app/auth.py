@@ -77,6 +77,31 @@ async def get_current_user(
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
+async def get_optional_user(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> User | None:
+    """Who is calling, if anyone — without requiring it.
+
+    For routes that are open to the public but show more to a signed-in user. The
+    incident map is the case: anyone may look, but only an officer is shown the actions
+    they could take on it.
+
+    A bad token is treated as no token rather than as an error. On a public route the
+    caller gets the public view, which is what they asked for.
+    """
+    if credentials is None:
+        return None
+    try:
+        return await get_current_user(credentials, session, settings)
+    except HTTPException:
+        return None
+
+
+OptionalUser = Annotated[User | None, Depends(get_optional_user)]
+
+
 def require_role(*allowed: UserRole):
     """Guard a route with the roles permitted to reach it.
 

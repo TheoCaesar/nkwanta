@@ -261,6 +261,11 @@ class Incident(Base):
     )
     resolved_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # How it ended, not just when. Drives reporter reputation: a confirmed incident
+    # vindicates everyone who reported it, a false alarm contradicts them.
+    resolution: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    resolution_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -276,6 +281,16 @@ class Incident(Base):
         CheckConstraint("confidence >= 0.0 AND confidence <= 1.0", name="ck_incidents_confidence_range"),
         CheckConstraint("report_count >= 0", name="ck_incidents_report_count_non_negative"),
         CheckConstraint("last_reported_at >= first_reported_at", name="ck_incidents_time_order"),
+        CheckConstraint(
+            "resolution IS NULL OR resolution IN ('confirmed', 'false_alarm')",
+            name="ck_incidents_resolution",
+        ),
+        # Makes "resolved with no stated outcome" unrepresentable rather than merely
+        # discouraged — the two fields must be set or unset together.
+        CheckConstraint(
+            "(resolution IS NULL) = (resolved_at IS NULL)",
+            name="ck_incidents_resolution_requires_time",
+        ),
         Index("ix_incidents_type_status", "incident_type", "status"),
         Index("ix_incidents_last_reported", "last_reported_at"),
         Index("ix_incidents_centroid", "centroid", postgresql_using="gist"),

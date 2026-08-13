@@ -77,6 +77,8 @@ class _Preserved:
     status: IncidentStatus
     assigned_to_id: uuid.UUID | None
     resolved_at: dt.datetime | None
+    resolution: str | None
+    resolution_note: str | None
 
 
 async def _fetch_neighbourhood(
@@ -199,6 +201,8 @@ async def rebuild_for_report(
                     status=inc.status,
                     assigned_to_id=inc.assigned_to_id,
                     resolved_at=inc.resolved_at,
+                    resolution=inc.resolution,
+                    resolution_note=inc.resolution_note,
                 )
 
         await session.execute(delete(Incident).where(Incident.id.in_(affected_incident_ids)))
@@ -246,6 +250,8 @@ async def rebuild_for_report(
             status=carried.status if carried else IncidentStatus(status_for(scored.confidence)),
             assigned_to_id=carried.assigned_to_id if carried else None,
             resolved_at=carried.resolved_at if carried else None,
+            resolution=carried.resolution if carried else None,
+            resolution_note=carried.resolution_note if carried else None,
         )
         session.add(incident)
         await session.flush()      # need incident.id for the join rows

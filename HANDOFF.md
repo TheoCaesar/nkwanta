@@ -9,6 +9,93 @@ what comes next.
 
 ---
 
+## 13 August 2026 — Session 11: B08 lifecycle, dispatch and the reputation loop
+
+### What happened
+
+**B08 — the officer workflow.** The dispatch queue now has something to do with the two
+verified incidents the seed produces.
+
+`app/lifecycle.py` holds every legal transition in **one table**. Anything absent is
+impossible by construction rather than by remembering to check — the alternative is
+conditional checks in each handler, which is how the third handler someone adds becomes
+the one that forgets. The same table drives the interface through `allowed_actions`, so a
+button that would be refused is never offered, and a property test asserts the two agree
+for every combination of state, action and role. Recorded as **D-024**.
+
+The distinction the module exists to enforce: **computed states** (reported,
+corroborated, verified) come from confidence and move both ways; **decided states**
+(assigned, resolved) come from a person and arithmetic never touches them. That is what
+stops a decaying score un-assigning a warden already standing at the junction.
+
+Two policy constraints worth defending: an unverified incident **cannot** be assigned, or
+the escalation threshold is decoration; and an incident nobody was sent to **cannot** be
+resolved, or the queue can be cleared by wishful thinking.
+
+**The reputation loop is closed.** Until now reputation was seeded and never moved.
+Resolving an incident now vindicates or contradicts every reporter, which is why
+resolution records an *outcome* (migration 0004) and not just a time. Both directions are
+required — if incidents could only be confirmed, fabricating would cost nothing.
+
+Formula is a Beta posterior, `(confirmed + 2) / (confirmed + contradicted + 4)`, recorded
+as **D-025**. A plain success ratio would give 1.0 after one confirmed report — file one
+true report, become fully trusted, then fabricate. The prior closes that: one
+confirmation moves a new account 0.50 → 0.60, and 0.9 takes roughly eighteen. Trust is
+deliberately lost faster than gained (5 confirmations = 0.778; 3 false alarms after that
+= 0.583) so fabricating is not profitable in expectation. Reputation can never reach 0,
+because a reporter at zero could never recover — every report would carry zero weight, so
+none could ever be confirmed.
+
+### A vacuous test caught for the second time
+
+`tests/test_routing.py` guards against a literal path being shadowed by an earlier
+parameterised one — `/incidents/queue` swallowed by `/incidents/{incident_id}` would
+return 422 with nothing failing at startup.
+
+The first version of its route traversal **found 5 routes out of 21**. FastAPI 0.141 does
+not put included routes on `app.routes`; it inserts an `_IncludedRouter` wrapper holding
+the original router. Every check passed over an almost-empty collection.
+
+Same failure as the clustering generator in Session 7, and the same remedy: a meta-test
+(`test_the_traversal_finds_the_real_routes`) that asserts the traversal finds at least 15
+routes. **This is now a recurring pattern worth naming — when a test asserts something
+about a collection, assert the collection is non-empty first.**
+
+The actual ordering turned out to be safe: the literal paths have two segments so a
+single-segment parameter cannot match them, and `/queue` is registered first.
+
+### Verified
+
+| Check | Result |
+|---|---|
+| Full suite | **211 passed, 8 skipped** |
+| All 19 API paths registered and documented | pass |
+| Migration 0003 → 0004 SQL valid | pass |
+| Commuter offered no actions in any state | pass |
+| Warden cannot self-assign | pass |
+| Unverified incident cannot be assigned | pass |
+| Unassigned incident cannot be resolved | pass |
+| `allowed_actions` agrees with the guard for all combinations | pass |
+| Reputation bounded, monotonic, never 0 or 1 | pass |
+
+Explainer written: `06-lifecycle-and-reputation.md`.
+
+### Unresolved
+
+1. **Migration 0004 not yet applied** — `alembic upgrade head` before pushing.
+2. Keep-warm ping still not configured.
+3. No audit trail of who assigned or resolved what — only current state is kept.
+4. Wardens are not notified of assignment; the outbox could carry it, sink is log-only.
+
+### Next actions, in order
+
+1. `alembic upgrade head`, `pytest`, commit, push
+2. F — voice notes, the answer to NFR-3
+3. B — corridor subscriptions and commuter advisory
+4. E — photo evidence; C — circuit breaker
+
+---
+
 ## 13 August 2026 — Session 10: integration verified, D seed data
 
 ### What happened

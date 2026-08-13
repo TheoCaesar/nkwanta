@@ -53,6 +53,7 @@ section, then [`CLAUDE.md`](CLAUDE.md).
 | [`docs/explainers/03-clustering-and-order-independence.md`](docs/explainers/03-clustering-and-order-independence.md) | Connected components, why incremental assignment fails, float associativity |
 | [`docs/explainers/04-confidence-and-decay.md`](docs/explainers/04-confidence-and-decay.md) | Noisy-OR, why not to sum weights, and the independence assumption that is false |
 | [`docs/explainers/05-the-outbox-worker-and-projection.md`](docs/explainers/05-the-outbox-worker-and-projection.md) | Draining the outbox, why rebuild beats update, preserving human decisions |
+| [`docs/explainers/06-lifecycle-and-reputation.md`](docs/explainers/06-lifecycle-and-reputation.md) | Rules as data, computed vs decided states, why reputation uses a Beta prior |
 
 Each ends with a thirty-second summary written to be said out loud. Rule 10 of the exam
 paper permits an oral examination on authorship and understanding — see *viva voce* in
@@ -150,8 +151,10 @@ them property-based.**
 | B05 spatio-temporal clustering | done |
 | B06 confidence with time decay | done |
 | B09 outbox worker, projection, incidents API | done |
-| D rich seed data and demo accounts | next |
-| B08 lifecycle state machine and dispatch | after that |
+| D rich seed data and demo accounts | done |
+| B08 lifecycle, dispatch, reputation loop | done |
+| F voice note reporting | next |
+| B corridor subscriptions and advisory | after that |
 
 The estimate that shaped all of this: Use Case Points puts full scope at **1,948
 person-hours**, roughly forty times the original examination window. The deliverable is

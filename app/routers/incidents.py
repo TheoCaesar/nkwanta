@@ -19,11 +19,22 @@ from geoalchemy2.shape import to_shape
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import ControlRoom
+from app.auth import ControlRoom, CurrentUser, OptionalUser, WardenOnly
 from app.confidence import THRESHOLD_STALE, THRESHOLD_VERIFIED
 from app.db import get_session
+from app.lifecycle import IllegalTransition, allowed_actions
 from app.models import Incident, IncidentReport, IncidentStatus, IncidentType, Report, User
-from app.schemas import EvidenceResponse, IncidentDetailResponse, IncidentResponse
+from app.schemas import (
+    AssignRequest,
+    EvidenceResponse,
+    IncidentDetailResponse,
+    IncidentResponse,
+    ReputationChange,
+    ResolveRequest,
+    ResolveResponse,
+    WardenResponse,
+)
+from app.services import dispatch
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
@@ -101,6 +112,7 @@ async def dispatch_queue(
 async def get_incident(
     incident_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
+    viewer: OptionalUser = None,
 ) -> IncidentDetailResponse:
     """The screen that makes confidence explainable.
 
@@ -135,4 +147,123 @@ async def get_incident(
             )
             for link, report, user in rows
         ],
+        # Empty for a signed-out visitor. Driving the interface from this means a button
+        # that would be refused is never offered in the first place.
+        allowed_actions=[
+            a.value for a in allowed_actions(incident.status, viewer.role)
+        ] if viewer else [],
     )
+
+
+# --- dispatch -----------------------------------------------------------------
+
+
+@router.get("/wardens/available", response_model=list[WardenResponse], summary="Wardens an officer can send")
+async def available_wardens(
+    _staff: ControlRoom,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> list[WardenResponse]:
+    return [
+        WardenResponse(id=w.id, display_name=w.display_name, reputation=w.reputation)
+        for w in await dispatch.wardens(session)
+    ]
+
+
+@router.post(
+    "/{incident_id}/assign",
+    response_model=IncidentResponse,
+    summary="Send a warden (officer only)",
+)
+async def assign_warden(
+    incident_id: uuid.UUID,
+    body: AssignRequest,
+    actor: ControlRoom,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> IncidentResponse:
+    try:
+        incident = await dispatch.assign(session, incident_id, actor, body.warden_id)
+    except IllegalTransition as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except dispatch.DispatchError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    return _to_response(incident)
+
+
+@router.post(
+    "/{incident_id}/unassign",
+    response_model=IncidentResponse,
+    summary="Recall a warden (officer only)",
+)
+async def unassign_warden(
+    incident_id: uuid.UUID,
+    actor: ControlRoom,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> IncidentResponse:
+    try:
+        incident = await dispatch.unassign(session, incident_id, actor)
+    except IllegalTransition as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except dispatch.DispatchError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    return _to_response(incident)
+
+
+@router.post(
+    "/{incident_id}/resolve",
+    response_model=ResolveResponse,
+    summary="Close an incident (assigned warden, or an officer)",
+)
+async def resolve_incident(
+    incident_id: uuid.UUID,
+    body: ResolveRequest,
+    actor: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ResolveResponse:
+    """The only place reputation changes.
+
+    Everyone who reported this incident is vindicated or contradicted by what the
+    warden found. The response says whose standing moved and by how much, so the
+    consequence of the decision is visible rather than silent.
+    """
+    try:
+        incident, changed = await dispatch.resolve(
+            session, incident_id, actor, body.resolution, body.note
+        )
+    except IllegalTransition as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except dispatch.DispatchError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    return ResolveResponse(
+        incident=_to_response(incident),
+        reputations_updated=[
+            ReputationChange(
+                user_id=u.id,
+                display_name=u.display_name,
+                reputation=u.reputation,
+                reports_confirmed=u.reports_confirmed,
+                reports_contradicted=u.reports_contradicted,
+            )
+            for u in changed
+        ],
+    )
+
+
+@router.get(
+    "/assigned/mine",
+    response_model=list[IncidentResponse],
+    summary="Incidents assigned to you (warden)",
+)
+async def my_assignments(
+    warden: WardenOnly,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> list[IncidentResponse]:
+    rows = await session.scalars(
+        select(Incident)
+        .where(
+            Incident.assigned_to_id == warden.id,
+            Incident.status == IncidentStatus.ASSIGNED,
+        )
+        .order_by(Incident.confidence.desc())
+    )
+    return [_to_response(i) for i in rows]
