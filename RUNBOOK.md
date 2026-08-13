@@ -160,11 +160,34 @@ git push -u origin main
 In Render: **New +** → **Blueprint** → select the repo. It reads `render.yaml` and
 proposes one free web service.
 
-**Set the environment variable by hand** — it is deliberately not in the repository:
+### Environment variables — the full list
 
-| Key | Value |
-|---|---|
-| `DATABASE_URL` | your Neon pooled connection string |
+`render.yaml` declares all six. Four carry their values; two do not, and this is the
+complete record of what must be supplied by hand.
+
+| Key | Where the value comes from | Why |
+|---|---|---|
+| `DATABASE_URL` | **You paste it.** Neon pooled connection string | A credential. Never committed — `sync: false` in the blueprint declares the variable without carrying its value. |
+| `JWT_SECRET` | **Render generates it.** `generateValue: true` | Signs authentication tokens. A generated random value beats a human-chosen one, and it stays stable across deploys. |
+| `ENVIRONMENT` | `render.yaml` → `production` | Switches the app from warning about the default JWT secret to refusing to start with it |
+| `PYTHON_VERSION` | `render.yaml` → `3.12.6` | Pinned so the build is reproducible |
+| `CLUSTER_RADIUS_METRES` | `render.yaml` → `300` | Tunable without a redeploy — see TD-03 |
+| `CLUSTER_WINDOW_MINUTES` | `render.yaml` → `30` | As above |
+| `CONFIDENCE_HALF_LIFE_MINUTES` | `render.yaml` → `45` | As above |
+
+So in the Render dashboard there is exactly **one** value to type: `DATABASE_URL`.
+
+**Locally** you need `DATABASE_URL` in `.env`. `JWT_SECRET` may be left at the default —
+the app warns but runs. To generate one anyway:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+> **The app refuses to start in production while `JWT_SECRET` is the default.** That is
+> deliberate. A live service signing tokens with a secret published in the repository is
+> not degraded, it is unauthenticated — so it fails loudly at boot rather than quietly
+> at runtime.
 
 Deploy. First build takes 3–5 minutes. Then check:
 

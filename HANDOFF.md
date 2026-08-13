@@ -9,6 +9,174 @@ what comes next.
 
 ---
 
+## 13 August 2026 — Session 6: B03 authentication, B04 report intake
+
+### What happened
+
+**Scope expanded.** Submission deadline extended by 8 hours, and the observed build rate
+is far above the bottom-up estimate's assumption. Six enhancements accepted (D-017):
+rich seed data, Tier 1 officer workflow, voice notes, corridor subscriptions and
+advisory, photo evidence, circuit breaker. The binding constraint is no longer hours —
+it is **viva defensibility**, so a plain-language explainer is now written for every
+module in `docs/explainers/`.
+
+**B03 — authentication.** Four roles: commuter, warden, officer, admin. Warden added at
+migration 0003; the VARCHAR + CHECK choice from D-005 meant a constraint swap inside an
+ordinary transaction rather than an `ALTER TYPE`. Deliberately **no driver role** — a
+driver and a passenger have identical permissions, and the difference is a client-side
+mode (NFR-3), not an account type. The server cannot know who is driving.
+
+Security decisions worth defending:
+
+- **Self-registration can only produce a commuter.** `RegisterRequest` has no role field
+  at all, so escalation is not a check that could be forgotten — it is an input that
+  does not exist.
+- **The database is read on every request**, not just the token. A token is a snapshot
+  from up to twelve hours ago; a deactivated account must lose access immediately.
+- **Failed logins take constant time.** bcrypt runs against a dummy hash for unknown
+  emails, so response timing cannot be used to discover which addresses are registered.
+- **Admins are not implicitly allowed everywhere.** Implicit superuser access is how a
+  permission system quietly stops meaning anything.
+
+**B04 — report intake with the transactional outbox.** The most important module in the
+submission. The report row and its outbox row are added to one session and committed by
+a single `commit()`, so the database guarantees both or neither. There is no instant at
+which a report exists and the instruction to act on it does not.
+
+Idempotency has two layers, and the distinction matters: the `SELECT` before insert is
+a fast path, the unique constraint is the correctness. Two simultaneous retries both
+pass the `SELECT`; only the constraint settles it, and the `IntegrityError` is caught
+and resolved by returning the row the other request committed.
+
+`app/geo.py` isolates the (longitude, latitude) conversion in one tested function.
+Accra reversed lands 600 km out in the Gulf of Guinea and **nothing raises** — every
+query runs and every answer is wrong. The Ghana bounding box is the safety net, and its
+rejection message names the likely cause.
+
+### Verified
+
+| Check | Result |
+|---|---|
+| Full suite | **89 passed** |
+| Report and outbox added before exactly one commit | asserted directly, order recorded |
+| Nothing written when validation fails | pass — no orphan outbox row |
+| Swapped coordinates rejected | pass |
+| Migration 0002 → 0003 SQL | valid |
+
+Explainers written: `01-authentication.md`, `02-report-intake-and-the-outbox.md`.
+
+### Deployment configuration — now complete
+
+`render.yaml` declares all seven environment variables. **Exactly one must be typed by
+hand in the Render dashboard: `DATABASE_URL`.** `JWT_SECRET` uses Render's
+`generateValue: true`, so it is generated strongly and stays stable. The clustering
+parameters are declared as environment variables specifically so TD-03 can be repaid by
+configuration rather than a redeploy. Full table in `RUNBOOK.md` Part 3.
+
+### Unresolved
+
+1. **Still not deployed to Render.** This is now the only significant outstanding risk.
+2. Migration 0003 not yet applied to Neon.
+3. Clustering parameters still provisional at 300 m / 30 min — needed by B05.
+4. Student ID and project title still not recorded.
+
+### Next actions, in order
+
+1. `pip install -r requirements.txt`, `alembic upgrade head`, `pytest`, commit, push
+2. **Deploy to Render** and confirm `/ready` on the live URL
+3. B05 — spatio-temporal clustering, the piece that decides nineteen reports are one crash
+4. B06 — confidence with time decay
+5. B09 — outbox worker, at which point the outbox rows written since B04 finally get drained
+
+---
+
+## 13 August 2026 — Session 5: B01 verified live, B02 data model built
+
+### What happened
+
+**B01 confirmed working end to end on the development machine.** `alembic upgrade head`
+applied against Neon, all tests green, `/health` and `/ready` both returning 200 with
+PostGIS reporting. The largest risk in the schedule is retired.
+
+Two build problems surfaced and were fixed, both worth recording because both are the
+kind of thing that eats an hour if hit at 3 a.m.:
+
+- **Python 3.14 had no wheels** for `asyncpg` 0.30 or `pydantic-core` 2.33, so pip tried
+  to compile from source and failed on the missing MSVC and Rust toolchains. Pins moved
+  forward to the first versions publishing 3.14 wheels, checked against the PyPI API
+  rather than guessed. Recorded as **D-015**.
+- **`pytest` failed where `python -m pytest` passed.** Module invocation puts the working
+  directory on `sys.path`; the console script does not. Fixed permanently with
+  `pythonpath = .` in `pytest.ini`, and both invocations now verified.
+
+**B02 — the data model — is written and tested.** Five tables:
+
+| Table | Role |
+|---|---|
+| `users` | People, and how much their reports have been worth believing |
+| `reports` | What people told us. **Append-only. Never updated.** |
+| `incidents` | Our interpretation. **A projection, fully rebuildable.** |
+| `incident_reports` | Which reports make up which incident. Also projection. |
+| `outbox` | Notifications still owed |
+
+The line between `reports` and `incidents` is the architecture. Reports are permanent;
+incidents are calculated, the way a bank balance is calculated from transactions rather
+than stored. Drop `incidents` and `incident_reports`, replay every report, and you must
+get back exactly what was there — which is what the replay property test will assert at
+B19.
+
+Design decisions worth defending in the viva:
+
+- **`reports` has no `status` column.** A mutable status invites an UPDATE, and the
+  replay property depends on the table never being edited. A contradiction is a *new*
+  row pointing at the old one through `contradicts_id`.
+- **Two clocks on every report.** `occurred_at` is what the reporter claims and can be
+  wrong or dishonest; `received_at` is our server clock and cannot be. Clustering uses
+  the first, auditing the second.
+- **`Geography`, not `Geometry`.** Distances come back in metres on a curved earth, so
+  "within 300 m" means the same thing everywhere. `Geometry` returns degrees, which vary
+  with latitude.
+- **A report may belong to at most one incident**, enforced by a unique constraint. If
+  clustering ever tries to place one in two, the database refuses — the bug surfaces as
+  an error rather than as a quietly double-counted confidence score.
+- **Enums are VARCHAR + CHECK, not native PostgreSQL enums.** Adding a seventh incident
+  type becomes a constraint change rather than an `ALTER TYPE` that cannot run inside a
+  transaction.
+- **`ondelete=RESTRICT` on `reports.reporter_id`.** Deleting a user must never silently
+  erase the reports that justified sending a warden somewhere.
+
+Migration `0002` hand-written rather than autogenerated — autogenerate mishandles
+GeoAlchemy2 geography columns and cannot express the partial index on the outbox at all.
+
+### Verified
+
+| Check | Result |
+|---|---|
+| Full suite after B02 | **45 passed** |
+| `alembic upgrade head --sql` generates valid SQL for 0001→0002 | pass |
+| GiST spatial indexes on `reports.location` and `incidents.centroid` | present |
+| Partial index `WHERE processed_at IS NULL` on outbox | present |
+| Both `pytest` and `python -m pytest` | pass |
+
+### Unresolved
+
+1. **Migration 0002 not yet run against Neon.** Offline SQL generation passes; the live
+   run is one command.
+2. **Render deployment not yet done.**
+3. **Clustering parameters still provisional** — 300 m / 30 min. Needed by B05.
+4. `JWT_SECRET` needs generating before B03.
+5. Student ID and project title still not recorded.
+
+### Next actions, in order
+
+1. `alembic upgrade head` against Neon → confirms 0002
+2. Push, run the Render blueprint, confirm `/ready` on the live URL
+3. B03 — auth and seeded users
+4. B04 — report intake with the transactional outbox. **The most important endpoint in
+   the submission.**
+
+---
+
 ## 12 August 2026 — Session 4: B01 complete, scaffold built and smoke-tested
 
 ### What happened

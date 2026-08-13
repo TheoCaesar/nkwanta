@@ -66,6 +66,34 @@ strongest entries in the technical debt register. See D-013.
 
 ---
 
+## 2a. What the B numbers mean
+
+**B stands for "build task".** `B01` to `B22` are the task identifiers from the
+bottom-up estimate in [`06-effort-estimation.md`](06-effort-estimation.md) §4 — the
+breakdown that produced the hour figures.
+
+They are used as a single vocabulary across the whole project so that an estimate, a
+schedule entry, a commit message, a debt item and a test can all refer to the same
+piece of work without ambiguity:
+
+| Where | Example |
+|---|---|
+| Estimate | `B04 — report intake, 3.6 h` |
+| Schedule | hours 4.5 – 8.1, marked ★ protected |
+| Commit | `B04: report intake with transactional outbox` |
+| Test file | `tests/test_report_intake.py` — "B04 — report intake" |
+| Debt register | "taken at B01" |
+
+The numbers are **not** sequential in time — they were assigned when the breakdown was
+written, and the schedule reorders them. B22 (the web page) is built before B10 (the
+circuit breaker), because value and risk order the work, not the numbering.
+
+**If asked in the viva:** "They are task identifiers from my bottom-up effort estimate.
+Using the same label in the estimate, the schedule, the commit history and the debt
+register means any one of those can be traced to the others."
+
+---
+
 ## 3. The schedule
 
 ★ marks protected work — the advanced concept. **Nothing here may be cut.** Total 13.6 hours.

@@ -83,6 +83,17 @@ class Settings(BaseSettings):
     # Half-life in minutes: how long before a report contributes half as much.
     confidence_half_life_minutes: int = 45
 
+    # --- Authentication --------------------------------------------------------
+    # Deliberately worthless by default. `database_configured` lets the app boot with
+    # no database so the first deploy can be debugged; the same courtesy would be
+    # dangerous here, so production refuses to start without a real secret instead.
+    jwt_secret: str = "insecure-development-secret-change-me"
+    jwt_expiry_minutes: int = 720          # 12 hours — one working day, then re-login
+
+    @property
+    def jwt_secret_is_default(self) -> bool:
+        return self.jwt_secret == "insecure-development-secret-change-me"
+
     @property
     def sqlalchemy_url(self) -> str:
         return _normalise_db_url(self.database_url)
