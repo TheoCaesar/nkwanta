@@ -47,6 +47,7 @@ urgent than debt that merely sits there.
 | TD-15 | Noisy-OR assumes independent reports; crowds overstate confidence | A | Medium | B06 |
 | TD-16 | Rebuild neighbourhood bound is a guess, could miss a distant merge | A | Low | B09 |
 | TD-17 | Demo seed and drain endpoints exist on the production deployment | **C** | Low now, critical before real use | D |
+| TD-18 | One database for development and production; no staging | S | High before real use | D |
 
 Items added during B02 onward are appended in build order.
 
@@ -125,6 +126,38 @@ stretch of the Tema Motorway.
 (they are already read from environment variables, so this is a data change rather than a
 code change). Then tune against labelled real incidents once any exist. Flooding needs a
 materially wider radius than a collision.
+
+---
+
+## TD-18 — One database serves both development and production
+
+**Debt.** The local development environment and the deployed service point at the same
+Neon database. There is no staging environment and no separate development data.
+
+**Cause.** Neon's free tier allows more than one project, so this was avoidable — it was
+not avoided because a single connection string is one less thing to configure wrongly
+during a 48-hour build, and because the demonstration data needs to be visible on the
+live site anyway.
+
+**Impact.** Running the seed script locally changes what an examiner sees. A careless
+migration or a stray `--reset` during development would take the live deployment with
+it. There is no environment in which to test a destructive change safely, which means
+destructive changes get tested in production or not at all.
+
+**Priority.** Low for an examination artefact, **high** for anything real.
+
+**Class.** S — scheduled.
+
+**Proposed resolution.** A second Neon project for development, with `DATABASE_URL` in
+`.env` pointing at it and only Render's environment pointing at production. Costs
+nothing on the free tier; it was a time decision rather than a money one, which is worth
+stating plainly rather than dressing up.
+
+**A related bootstrap wrinkle**, recorded here because it is the same root cause:
+`POST /admin/seed` requires an admin account that only the seed creates, so on a fresh
+database the endpoint cannot be reached and the command-line script must run first. With
+a separate development database this would have surfaced during setup rather than at
+demonstration time.
 
 ---
 

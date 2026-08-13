@@ -244,10 +244,23 @@ than duplicates.
 
 ### On the live deployment
 
-Log in at `/docs` as `admin@nkwanta.demo`, then `POST /admin/seed`.
+> **Run the local script first, at least once.** `POST /admin/seed` requires an admin
+> login, and the admin account is created *by* the seed — so on a fresh database the
+> endpoint cannot be reached. Bootstrap it from the command line, then use the endpoint
+> for refreshes afterwards.
 
-Same code, reachable from a browser. This endpoint should not exist in a real
-deployment and is recorded as **TD-17**.
+1. Open `https://nkwanta.onrender.com/docs`
+2. `POST /auth/login` → **Try it out** → `admin@nkwanta.demo` / `NkwantaDemo2026`
+3. Copy `access_token` from the response
+4. **Authorize** (top right) → paste → **Authorize**
+5. `POST /admin/seed` → **Try it out** → **Execute**
+
+No Postman needed — the generated documentation is a working client. This endpoint
+should not exist in a real deployment and is recorded as **TD-17**.
+
+> **One database, two environments.** Local development and the live service share the
+> same Neon database, so seeding from your laptop changes what the live site shows.
+> Convenient during an examination, wrong in general — recorded as **TD-18**.
 
 ### What you should see afterwards
 
