@@ -9,6 +9,86 @@ what comes next.
 
 ---
 
+## 13 August 2026 — Session 10: integration verified, D seed data
+
+### What happened
+
+**The integration tests passed against real Neon PostGIS — all 8, in 104 seconds.** That
+is the projection verified end to end for the first time: `ST_DWithin` measuring metres
+rather than degrees, coordinates round-tripping through the geography column in the right
+order, an 8 km separation refusing to merge, a later report merging into an existing
+incident rather than spawning a neighbour. The runtime is network latency to Neon, not
+slowness in the code.
+
+**D — demonstration data.** 16 accounts and 38 reports across 20 real Greater Accra
+locations, forming a Tuesday morning rush hour.
+
+Two properties of this are load-bearing and both are tested:
+
+- **Timestamps are relative to run time, never fixed.** Confidence halves every 45
+  minutes, so hard-coded times would leave the map blank whenever anyone actually
+  looked. An examiner would open it, see nothing, and conclude the system does not work.
+- **Identifiers are deterministic** (`uuid5` from a fixed namespace), so re-running
+  updates rather than duplicates.
+
+Seeded reports go through the **ordinary outbox, clustering and confidence path**.
+Nothing is special-cased, so what an examiner sees is produced by exactly the code that
+handles live submissions.
+
+### The scenario, dry-run through the real engine
+
+38 reports → **20 incidents**:
+
+| Place | Type | Reports | Confidence | Status |
+|---|---|---:|---:|---|
+| Kwame Nkrumah Circle | accident | 6 | 0.882 | **verified** |
+| Kaneshie Market | closure | 5 | 0.728 | **verified** |
+| Achimota junction | signal outage | 4 | 0.626 | corroborated |
+| Spintex Road | flood | 3 | 0.555 | corroborated |
+| Madina Market | accident | 3 | 0.146 | reported — *visibly fading, 95 min old* |
+| Lapaz | closure | 1 | 0.040 | reported — *discredited reporter* |
+| Nungua | flood | 1 | 0.020 | reported — *discredited reporter* |
+
+Two verified, two corroborated, sixteen unconfirmed. Both mechanisms are visible at a
+glance: **Madina has three reports and scores 0.146 because they are 95 minutes old**,
+while Lapaz has a fresh report scoring 0.040 because its reporter has a 0.12 reputation.
+Decay and reputation, each demonstrable without explanation.
+
+**`POST /admin/seed`** refreshes the data from a browser, and **`POST /admin/drain`**
+forces the worker to run immediately — useful mid-demonstration.
+
+### Verified
+
+| Check | Result |
+|---|---|
+| Integration suite against real Neon PostGIS | **8 passed** |
+| Full suite | **175 passed, 8 skipped** |
+| Every seeded place inside Ghana | pass — catches a lat/long swap in the table |
+| All six incident types represented | pass |
+| Reports span fresh and fading | pass |
+| Nothing older than intake would accept | pass |
+| Report keys unique | pass |
+
+New debt: **TD-17** — `POST /admin/seed` and `/admin/drain` exist on the production
+deployment. Classified **critical**: acceptable only because this deployment exists to be
+marked. Resolution is to gate them on `ENVIRONMENT != "production"` at router
+registration, so they cannot be reached at all rather than merely being protected.
+
+### Unresolved
+
+1. Seed not yet run against Neon — one command.
+2. Keep-warm ping still not configured.
+3. Clustering and confidence parameters remain guesses (TD-03, TD-04).
+
+### Next actions, in order
+
+1. `python -m scripts.seed_demo --reset`, then push and deploy
+2. B08 and the officer workflow — lifecycle state machine, dispatch, assignment
+3. F — voice notes, the answer to NFR-3
+4. B — corridor subscriptions and commuter advisory
+
+---
+
 ## 13 August 2026 — Session 9: B09 outbox worker — the system is connected
 
 ### What happened

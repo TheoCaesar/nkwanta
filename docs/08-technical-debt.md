@@ -46,6 +46,7 @@ urgent than debt that merely sits there.
 | TD-14 | Clustering is O(n²) within each type bucket | S | Low | B05 |
 | TD-15 | Noisy-OR assumes independent reports; crowds overstate confidence | A | Medium | B06 |
 | TD-16 | Rebuild neighbourhood bound is a guess, could miss a distant merge | A | Low | B09 |
+| TD-17 | Demo seed and drain endpoints exist on the production deployment | **C** | Low now, critical before real use | D |
 
 Items added during B02 onward are appended in build order.
 
@@ -124,6 +125,34 @@ stretch of the Tema Motorway.
 (they are already read from environment variables, so this is a data change rather than a
 code change). Then tune against labelled real incidents once any exist. Flooding needs a
 materially wider radius than a collision.
+
+---
+
+## TD-17 — A demonstration-data endpoint exists in the production deployment
+
+**Debt.** `POST /admin/seed` wipes and rebuilds the demonstration data, and it is present
+on the live deployment. `POST /admin/drain` likewise forces the outbox worker to run.
+
+**Cause.** Confidence decays with a 45-minute half-life, so seeded data is invisible
+within a few hours. Refreshing it before a demonstration or viva has to be possible, and
+doing it from a browser is markedly more reliable than asking someone to find a terminal
+with the right environment configured.
+
+**Impact.** An endpoint that deletes data exists on a public deployment. It is
+admin-only, and the admin password is published in the submission — which is fine for an
+examination artefact and would be unacceptable anywhere else. `clear_demo_data` only
+removes rows whose identifiers the seed module generates, so real reports would survive,
+but that is a property of the current implementation rather than a guarantee.
+
+**Priority.** Low here, **critical** before any real use.
+
+**Class.** C — critical, in the sense that it must not survive contact with real users.
+Acceptable only because this deployment exists to be marked.
+
+**Proposed resolution.** Remove both endpoints from any non-examination build, gated on
+`ENVIRONMENT != "production"` at router registration so they cannot be reached at all
+rather than merely being protected. Seeding then happens only through
+`scripts/seed_demo.py`, run deliberately by someone with database access.
 
 ---
 
