@@ -9,6 +9,132 @@ Format: what was decided, what else was considered, why, and what it costs.
 
 ---
 
+## 13 August 2026 — B06 confidence
+
+### D-023 — Confidence combines evidence with noisy-OR, not a sum
+
+**Decided:** An incident's confidence is `1 − ∏(1 − wᵢ)`, where each report's weight is
+`reputation × decay(age) × evidence_strength`. Evidence strength is capped at 0.45 so no
+single report can ever reach the escalation threshold alone.
+
+**Considered:** summing weights and clamping to 1; taking the maximum weight; a simple
+count of corroborating reports.
+
+**Why:** Summing is wrong twice — it exceeds 1, and it treats the hundredth report as
+worth as much as the second, when in reality the first independent confirmation changes
+your mind and the fiftieth changes nothing. Clamping would paper over the first problem
+and a model that needs clamping to stay legal has stopped meaning anything. Taking the
+maximum discards corroboration entirely, which is the one thing the system exists to
+measure. A plain count ignores reporter reliability, so a discredited account would count
+the same as a proven one.
+
+Noisy-OR has a probabilistic reading — the chance at least one reporter is right — and
+yields bounded, monotonic and saturating behaviour with no clamping. Because
+multiplication is commutative it is also order-independent, matching the guarantee made
+by clustering.
+
+The 0.45 cap is what forces corroboration: with it, even a perfectly trusted reporter
+alone scores 0.427 against a 0.70 threshold, so summoning police always takes more than
+one person.
+
+**Costs.** Noisy-OR assumes independence and reports are not independent — six people in
+one jam are one event seen six times. Confidence is therefore systematically overstated
+for crowds, and the bias runs towards over-confidence, which is the more dangerous
+direction. Recorded as **TD-15** with the direction of the error stated and two proposed
+mitigations. Every constant is a guess fitted to no data (**TD-04**), which is why they
+are environment variables rather than literals.
+
+---
+
+## 13 August 2026 — B05 clustering
+
+### D-022 — Test data is generated around hotspots, not uniformly
+
+**Decided:** The Hypothesis generator for clustering draws a few hotspot locations and
+scatters reports around them, jittered by up to twice the clustering radius. It does not
+draw reports uniformly across Accra.
+
+**Considered:** uniform generation across the bounding box, which is the obvious first
+implementation and was the original one.
+
+**Why:** Uniform generation was measured and found to be **useless**. Across the Accra
+bounding box — roughly 22 km by 28 km — with at most 25 reports and a 300 m radius, only
+**1 generated set in 300** contained any merge at all.
+
+Every property passed. That is the problem, not the reassurance: they were passing over
+collections of singleton clusters, where order-independence is trivially true and proves
+nothing. A test that passes for the wrong reason is worse than one that fails, because
+it buys confidence it has not earned.
+
+Hotspot generation also matches reality — real reports arrive around real events, not
+scattered evenly over a city.
+
+**Guarded by** `test_the_generator_actually_produces_merges`, which asserts more than
+half of generated sets contain a genuine merge, so the suite cannot silently become
+decorative again.
+
+**Costs.** The generator is more complex than a uniform one, and the property suite runs
+in about 30 seconds rather than 4. Both are worth it for tests that actually test.
+
+---
+
+### D-021 — Test intensity is a profile, not a hard-coded number
+
+**Decided:** Hypothesis example counts come from named profiles in `tests/conftest.py` —
+`dev` at 50, `default` at 150, `thorough` at 1000 — selected by the `HYPOTHESIS_PROFILE`
+environment variable.
+
+**Considered:** a single hard-coded `max_examples`.
+
+**Why:** Iterating on a failure wants fast feedback; producing evidence for the testing
+report wants thoroughness. One fixed number forces a choice between them and is wrong
+half the time. Profiles let the same tests serve both without editing.
+
+All profiles disable the per-example deadline: clustering is O(n²) in the size of a
+generated set, so a large set can legitimately exceed Hypothesis's default 200 ms without
+anything being wrong. A deadline there would flag slow *data*, not slow code.
+
+**Costs.** One more thing to explain, and a reader who runs plain `pytest` sees 150
+examples rather than the 1000 quoted in the testing report. The command is stated
+alongside the figure wherever it appears.
+
+---
+
+### D-020 — Clustering by connected components, not incremental assignment
+
+**Decided:** Reports are grouped by building a graph — an edge between two reports of the
+same type, within the distance limit and the time window — and taking its connected
+components, computed with union-find.
+
+**Considered:** incremental assignment, where each arriving report joins the nearest
+existing incident or starts a new one. This is the obvious approach and what most
+implementations do.
+
+**Why:** Incremental assignment is **order-dependent**, which breaks the one property the
+whole system is built on. The counter-example is three reports in a line 200 m apart with
+a 300 m radius: arriving A, B, C gives one incident; arriving A, C, B gives two, because
+C starts its own before B arrives to bridge them. The flaw is not the tie-break — it is
+that incremental assignment consults "what already exists", and that depends on order.
+
+Connected components have no prior state to consult, and a graph's components provably do
+not depend on the order edges were added. The linking rule is symmetric, which is
+load-bearing: an asymmetric rule would make the graph directed and the argument would
+collapse.
+
+A related subtlety was found while testing: floating-point addition is not associative,
+so summing centroid coordinates in different orders differed in the last bit. Rather than
+weaken the property test to a tolerance — which would have let order matter a little —
+the centroid sums in id order, making it bit-for-bit reproducible.
+
+**Costs.** Two, both recorded on the debt register rather than hidden. Single linkage
+**chains**: a line of reports each 250 m apart merges into one long incident (TD-13). And
+the pairwise comparison is O(n²) within each type bucket (TD-14). Complete linkage and
+DBSCAN both address chaining but cost more than they fix here — complete linkage
+fragments genuine incidents spanning a junction, and DBSCAN introduces parameters as
+unvalidated as the two already present.
+
+---
+
 ## 13 August 2026 — scope expansion, deadline extended by 8 hours
 
 ### D-019 — Media stored in the database, not object storage

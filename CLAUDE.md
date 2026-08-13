@@ -17,6 +17,16 @@ It is being built as a submission for **CSCD602 Advanced Software Engineering**,
 48-hour individual project examination at the University of Ghana, examined by
 Prof. Solomon Mensah. Marks total 50.
 
+| | |
+|---|---|
+| Student ID | **22424543** |
+| Project title | **Nkwanta: A Road Incident Reporting and Dispatch System for Urban Ghana** |
+| Submission folder | `22424543_Nkwanta/` |
+| Demo password (all seeded accounts) | `NkwantaDemo2026` |
+
+Use the full project title on every document cover. Use the short name `Nkwanta` in
+prose, folder names and commit messages.
+
 **The single most important thing to understand:** this exam does not reward a big
 application. It rewards visible, disciplined engineering process. Implementation is
 only 10 of the 50 marks. Requirements, estimation, design, testing, technical debt,

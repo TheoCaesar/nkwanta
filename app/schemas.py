@@ -16,7 +16,7 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from app.models import IncidentType, UserRole
+from app.models import IncidentStatus, IncidentType, UserRole
 
 
 # --- authentication -----------------------------------------------------------
@@ -103,6 +103,41 @@ class ReportResponse(BaseModel):
     received_at: dt.datetime
     note: str | None
     reporter_id: uuid.UUID
+
+
+class EvidenceResponse(BaseModel):
+    """One report's contribution to an incident's confidence.
+
+    This is what makes the score explainable rather than merely displayed. An officer
+    can see which reporter, how reliable they have been, and how much that particular
+    report counted.
+    """
+
+    report_id: uuid.UUID
+    reporter_name: str
+    reporter_reputation: float
+    occurred_at: dt.datetime
+    weight: float
+
+
+class IncidentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    incident_type: IncidentType
+    latitude: float
+    longitude: float
+    confidence: float
+    status: IncidentStatus
+    report_count: int
+    first_reported_at: dt.datetime
+    last_reported_at: dt.datetime
+    assigned_to_id: uuid.UUID | None = None
+    resolved_at: dt.datetime | None = None
+
+
+class IncidentDetailResponse(IncidentResponse):
+    evidence: list[EvidenceResponse]
 
 
 class ReportAccepted(BaseModel):

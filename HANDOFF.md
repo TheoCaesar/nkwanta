@@ -9,6 +9,355 @@ what comes next.
 
 ---
 
+## 13 August 2026 — Session 10: integration verified, D seed data
+
+### What happened
+
+**The integration tests passed against real Neon PostGIS — all 8, in 104 seconds.** That
+is the projection verified end to end for the first time: `ST_DWithin` measuring metres
+rather than degrees, coordinates round-tripping through the geography column in the right
+order, an 8 km separation refusing to merge, a later report merging into an existing
+incident rather than spawning a neighbour. The runtime is network latency to Neon, not
+slowness in the code.
+
+**D — demonstration data.** 16 accounts and 38 reports across 20 real Greater Accra
+locations, forming a Tuesday morning rush hour.
+
+Two properties of this are load-bearing and both are tested:
+
+- **Timestamps are relative to run time, never fixed.** Confidence halves every 45
+  minutes, so hard-coded times would leave the map blank whenever anyone actually
+  looked. An examiner would open it, see nothing, and conclude the system does not work.
+- **Identifiers are deterministic** (`uuid5` from a fixed namespace), so re-running
+  updates rather than duplicates.
+
+Seeded reports go through the **ordinary outbox, clustering and confidence path**.
+Nothing is special-cased, so what an examiner sees is produced by exactly the code that
+handles live submissions.
+
+### The scenario, dry-run through the real engine
+
+38 reports → **20 incidents**:
+
+| Place | Type | Reports | Confidence | Status |
+|---|---|---:|---:|---|
+| Kwame Nkrumah Circle | accident | 6 | 0.882 | **verified** |
+| Kaneshie Market | closure | 5 | 0.728 | **verified** |
+| Achimota junction | signal outage | 4 | 0.626 | corroborated |
+| Spintex Road | flood | 3 | 0.555 | corroborated |
+| Madina Market | accident | 3 | 0.146 | reported — *visibly fading, 95 min old* |
+| Lapaz | closure | 1 | 0.040 | reported — *discredited reporter* |
+| Nungua | flood | 1 | 0.020 | reported — *discredited reporter* |
+
+Two verified, two corroborated, sixteen unconfirmed. Both mechanisms are visible at a
+glance: **Madina has three reports and scores 0.146 because they are 95 minutes old**,
+while Lapaz has a fresh report scoring 0.040 because its reporter has a 0.12 reputation.
+Decay and reputation, each demonstrable without explanation.
+
+**`POST /admin/seed`** refreshes the data from a browser, and **`POST /admin/drain`**
+forces the worker to run immediately — useful mid-demonstration.
+
+### Verified
+
+| Check | Result |
+|---|---|
+| Integration suite against real Neon PostGIS | **8 passed** |
+| Full suite | **175 passed, 8 skipped** |
+| Every seeded place inside Ghana | pass — catches a lat/long swap in the table |
+| All six incident types represented | pass |
+| Reports span fresh and fading | pass |
+| Nothing older than intake would accept | pass |
+| Report keys unique | pass |
+
+New debt: **TD-17** — `POST /admin/seed` and `/admin/drain` exist on the production
+deployment. Classified **critical**: acceptable only because this deployment exists to be
+marked. Resolution is to gate them on `ENVIRONMENT != "production"` at router
+registration, so they cannot be reached at all rather than merely being protected.
+
+### Unresolved
+
+1. Seed not yet run against Neon — one command.
+2. Keep-warm ping still not configured.
+3. Clustering and confidence parameters remain guesses (TD-03, TD-04).
+
+### Next actions, in order
+
+1. `python -m scripts.seed_demo --reset`, then push and deploy
+2. B08 and the officer workflow — lifecycle state machine, dispatch, assignment
+3. F — voice notes, the answer to NFR-3
+4. B — corridor subscriptions and commuter advisory
+
+---
+
+## 13 August 2026 — Session 9: B09 outbox worker — the system is connected
+
+### What happened
+
+**The pure modules are no longer orphans.** Until now `clustering.py` and
+`confidence.py` were exercised only by tests; nothing in the running application called
+them. B09 closes that loop.
+
+`POST /reports` → outbox row (B04) → worker claims it → neighbourhood fetched with a
+live PostGIS query → clustering and confidence run → incident written → `GET /incidents`.
+
+**`app/services/projection.py`** — rebuilds incidents rather than updating them. That
+matters: a new report can **merge two previously separate incidents**, and an algorithm
+that only appends to an existing incident can never discover that. Rebuilding is also
+what keeps the replay property true.
+
+The neighbourhood fetch has two steps, and the second is easy to miss. Step 1 finds
+same-type reports near in space and time. Step 2 expands to *whole incidents* — without
+it, a rebuild can pull in half an incident and the other half silently vanishes, because
+its reports were never in the working set.
+
+**Human decisions survive rebuilds.** Assignment and resolution are captured before the
+delete and carried across, keyed by the cluster's smallest member id — stable because
+membership is order-independent. Confidence computes `reported`, `corroborated` and
+`verified`; `assigned` and `resolved` are human acts and arithmetic never overwrites them.
+
+**`app/worker.py`** — in-process asyncio drainer. `FOR UPDATE SKIP LOCKED` (a no-op with
+one worker, correct with several), one commit per batch so a crash replays the whole
+batch, failures recorded per row so one poison message cannot block everything behind it,
+and an exception can never kill the loop.
+
+**`app/routers/incidents.py`** — results are finally visible. Note the asymmetry:
+incidents are public, individual reports are not. `GET /incidents/{id}` returns the
+contributing reports and the weight each carried, which is what makes confidence
+explainable rather than merely displayed.
+
+### The testing gap, and how it was closed
+
+Everything so far ran against pure functions and stubs. That cannot catch what only a
+real database can: whether `ST_DWithin` measures metres or degrees, whether the geography
+column round-trips coordinates the right way round, whether cascades behave.
+
+PostGIS could not be installed in the build sandbox — `pgserver` ships only `plpgsql` and
+`vector`, and there is no root for apt. So `tests/test_integration_pipeline.py` was
+written to run against a real database and **skip automatically when `DATABASE_URL` is
+unset**. Two of its cases earn their keep alone: an 8 km separation must not merge (proves
+metres, not degrees), and coordinates must survive the round trip (a swap would put the
+centroid in the Gulf of Guinea with nothing else noticing).
+
+**These have not yet been run.** They need running locally against Neon — that is the
+next action, and the first real verification of the projection.
+
+### Verified
+
+| Check | Result |
+|---|---|
+| Full suite | **154 passed, 8 skipped** (integration, awaiting a database) |
+| Batch commits once, not per row | pass |
+| One failing row does not block its batch | pass |
+| Row abandoned after 5 attempts, left visible | pass |
+| Unknown event type skipped, not retried forever | pass |
+| Handler exception does not kill the loop | pass |
+| Already-processed row not handled twice | pass |
+
+New debt: **TD-16** — the rebuild neighbourhood bound (3× radius) is a chosen number, not
+a derived one. With chaining (TD-13) a long enough chain could link incidents outside each
+other's neighbourhood and a merge would be missed. Fix is to expand iteratively until no
+cluster touches the edge.
+
+Explainer written: `05-the-outbox-worker-and-projection.md`.
+
+### Unresolved
+
+1. **Integration tests not yet run against Neon.** This is the only real verification gap.
+2. Demo accounts still do not exist — step D.
+3. Clustering and confidence parameters remain guesses (TD-03, TD-04).
+4. Keep-warm ping not configured.
+
+### Next actions, in order
+
+1. `pytest tests/test_integration_pipeline.py -v` locally against Neon
+2. Commit, push, deploy — **this deploy changes what the app does**, unlike the last one
+3. D — seed data and demo accounts: ~20 Accra junctions, ~60 reports, real clustering
+4. B08 and the officer workflow — lifecycle state machine, dispatch, assignment
+
+---
+
+## 13 August 2026 — Session 8: B06 confidence, submission file created
+
+### What happened
+
+**Live deployment confirmed working.** `https://nkwanta.onrender.com/` returns a green
+status with `PostGIS 3.6.0` in production. Deployment is retired as a risk.
+
+**`Deployment_and_Source_Links.txt` created** — one of the six required submission files.
+Student: Theophilus Caesar, 22424543. Title: *Nkwanta: A Road Incident Reporting and
+Dispatch System for Urban Ghana*. Repository `github.com/TheoCaesar/nkwanta`. The file
+opens with the free-tier cold-start warning so an examiner does not conclude the
+application is broken, explains the four roles, and ends with a five-minute walkthrough
+pointing at the parts worth seeing — including the swapped-coordinates rejection.
+
+**B06 — confidence scoring.** Each report contributes
+`reputation × decay(age) × evidence_strength`, and those weights combine with **noisy-OR**:
+`1 − ∏(1 − wᵢ)`, read as "the probability that at least one reporter is right".
+
+Chosen over summing weights, which fails twice: it exceeds 1, and it treats the hundredth
+report as worth as much as the second. Noisy-OR is bounded, monotonic and saturating with
+**no clamping anywhere** — and because multiplication is commutative, it is
+order-independent, matching the guarantee clustering makes. Recorded as **D-023**.
+
+The 0.45 evidence cap is what forces corroboration. Even a perfectly trusted reporter
+alone scores 0.427 against a 0.70 threshold, so police are never summoned on one
+person's word. Directly tested.
+
+### Calibration — measured, not assumed
+
+Confidence for *n* fresh reports:
+
+| n | rep 0.30 | rep 0.50 | rep 0.95 |
+|---:|---:|---:|---:|
+| 1 | 0.135 | 0.225 | 0.427 |
+| 3 | 0.353 | 0.535 | **0.812** |
+| 5 | 0.516 | **0.720** | 0.938 |
+| 8 | 0.687 | 0.870 | 0.988 |
+
+One unknown reporter alerts nobody. Five ordinary reporters reach the police. Three
+consistently reliable ones get there faster — which is the entire purpose of tracking
+reputation. Discredited accounts need eight or more, so someone inventing closures from
+home cannot get there alone.
+
+A single average report decays 0.225 → 0.113 at 45 minutes → 0.001 at six hours. **That
+is what makes incidents clear themselves**, with nobody pressing a button.
+
+### Verified
+
+| Check | Result |
+|---|---|
+| Full suite | **143 passed** (53 property-based) |
+| Order independence of the score | pass, bit-for-bit identical |
+| Bounded [0,1] with no clamping in the code | pass |
+| More evidence never lowers confidence | pass |
+| Each further report adds less than the last | pass |
+| No single report can verify alone | pass |
+| Live deployment | **green, PostGIS 3.6.0** |
+
+New debt: **TD-15** — noisy-OR assumes independent reports and they are not. Six people
+in one jam are one event seen six times, so confidence is systematically overstated for
+crowds. The bias runs towards over-confidence, which is the more dangerous direction.
+Recorded with two proposed mitigations rather than hidden.
+
+Explainer written: `04-confidence-and-decay.md`.
+
+### Unresolved
+
+1. Confidence and clustering are both pure modules with **no caller yet**. They start
+   running for real at B09, the outbox worker.
+2. Clustering and confidence parameters remain guesses fitted to no data (TD-03, TD-04).
+3. Keep-warm ping not yet configured at cron-job.org.
+4. Seeded demo accounts declared in the submission file **do not exist yet** — the seed
+   script creates them at step D.
+
+### Next actions, in order
+
+1. B09 — the outbox worker. Drains the outbox, runs clustering and confidence, writes
+   incidents. This is where the pure modules finally connect to the running system.
+2. D — rich seed data and demo accounts, at which point the application starts looking
+   like a system rather than a prototype
+3. B08 and the officer workflow — lifecycle state machine, dispatch, assignment
+
+---
+
+## 13 August 2026 — Session 7: B05 clustering, and the application is live
+
+### What happened
+
+**Deployed to Render successfully.** The first attempt failed at startup with
+`RuntimeError: JWT_SECRET is still the development default` — which is the safeguard in
+`app/main.py` working exactly as intended. A production service signing tokens with a
+secret published in the repository is not degraded, it is unauthenticated, so it refuses
+to boot rather than accepting forgeable tokens.
+
+Root cause worth recording: `generateValue: true` in `render.yaml` only fires when Render
+*creates* a service from the blueprint. An existing service does not pick up newly added
+variables. Resolved by setting `JWT_SECRET` by hand in the dashboard. Added to the
+runbook troubleshooting table, along with the note that `No open ports detected` is a
+symptom — the app exited before binding — and the real error is always further up the log.
+
+All three migrations applied to Neon during the build. **The application is live.**
+
+**B05 — the clustering engine.** The module that makes this project advanced rather than
+merely large.
+
+Grouping is a **graph problem**: an edge between two reports of the same type that are
+close in both place and time, and incidents are the connected components of that graph,
+computed by union-find.
+
+The alternative — incremental assignment, where each arriving report joins the nearest
+existing incident — is order-dependent and therefore unusable. The counter-example is now
+a test: three reports in a line 200 m apart with a 300 m radius give one incident arriving
+A, B, C and two arriving A, C, B. Connected components give one either way, because a path
+exists through the middle report. Recorded as **D-020**.
+
+`app/clustering.py` is deliberately **pure** — no database, no clock, no randomness. That
+is what allows thousands of generated cases per second, which is what makes the
+order-independence property provable rather than merely asserted.
+
+### Two findings worth keeping
+
+**Floating-point addition is not associative.** `(0.1+0.2)+0.3` differs from
+`0.1+(0.2+0.3)` in the last bit. Summing centroid coordinates in different orders produced
+answers differing by about 1e-16 degrees — nanometres, physically meaningless, but a
+broken promise nonetheless. The property test asserts *identical*, not *nearly identical*,
+so it caught it. Fixed by sorting by report id before summing. Weakening the assertion to
+a tolerance would have let order matter a little and hidden a whole class of bug.
+
+**The property tests were passing vacuously, and it took measuring to notice.** The first
+generator scattered reports uniformly over Accra's 22 km × 28 km box. With at most 25
+reports and a 300 m radius, only **1 generated set in 300** contained any merge at all —
+so every property was passing over collections of singleton clusters, where
+order-independence is trivially true. The generator now seeds hotspots the way reality
+does, and `test_the_generator_actually_produces_merges` asserts more than half of sets
+contain a real merge, so the file cannot silently rot again. Recorded as **D-022**.
+
+### Verified
+
+| Check | Result |
+|---|---|
+| Full suite | **111 passed** (21 property-based) |
+| Order independence over random shuffles | pass, bit-for-bit identical |
+| Reversal of arrival order | pass |
+| The three-in-a-line counter-example, all 6 orderings | pass |
+| Every report in exactly one cluster | pass |
+| No two distinct clusters are linked | pass |
+| Idempotence — clustering twice changes nothing | pass |
+| Generator produces genuine merges | pass, >50% of sets |
+| Live deployment | **up** |
+
+Hypothesis profiles added (**D-021**): `dev` 50 examples, `default` 150,
+`thorough` 1000 via `HYPOTHESIS_PROFILE=thorough pytest` for the testing report.
+
+New debt: **TD-13** single-linkage chaining along a corridor, **TD-14** O(n²) pair
+comparison. Both with proposed resolutions that preserve order-independence.
+
+Explainer written: `03-clustering-and-order-independence.md`.
+
+### Unresolved
+
+1. **The three clustering environment variables are not yet set on Render.** They have
+   safe defaults in code, so the app runs — but setting them explicitly is what makes
+   TD-03 repayable by configuration rather than redeploy.
+2. Clustering still runs nowhere in production — it is a pure module with no caller until
+   the outbox worker exists at B09.
+3. Clustering parameters still provisional at 300 m / 30 min (TD-03, highest priority).
+4. Student ID and project title still not recorded.
+5. Live URL not yet written into `Deployment_and_Source_Links.txt` — that file does not
+   exist yet.
+
+### Next actions, in order
+
+1. Set the three clustering variables on Render
+2. B06 — confidence scoring with time decay, turning a cluster into a number an officer
+   can act on
+3. B09 — the outbox worker, at which point the outbox rows written since B04 finally get
+   drained and clustering runs for real
+4. D — rich seed data, the point at which the application starts looking like a system
+   rather than a prototype
+
+---
+
 ## 13 August 2026 — Session 6: B03 authentication, B04 report intake
 
 ### What happened

@@ -42,6 +42,11 @@ urgent than debt that merely sits there.
 | TD-10 | Dependency pinning verified once, no automated audit | S | Medium | B01 |
 | TD-11 | No CI pipeline — tests run only when remembered | S | Medium | B01 |
 | TD-12 | Single shared database, no read replica or partitioning | A | Low | Design |
+| TD-13 | Single-linkage clustering chains along a corridor | A | Medium | B05 |
+| TD-14 | Clustering is O(n²) within each type bucket | S | Low | B05 |
+| TD-15 | Noisy-OR assumes independent reports; crowds overstate confidence | A | Medium | B06 |
+| TD-16 | Rebuild neighbourhood bound is a guess, could miss a distant merge | A | Low | B09 |
+| TD-17 | Demo seed and drain endpoints exist on the production deployment | **C** | Low now, critical before real use | D |
 
 Items added during B02 onward are appended in build order.
 
@@ -120,6 +125,147 @@ stretch of the Tema Motorway.
 (they are already read from environment variables, so this is a data change rather than a
 code change). Then tune against labelled real incidents once any exist. Flooding needs a
 materially wider radius than a collision.
+
+---
+
+## TD-17 — A demonstration-data endpoint exists in the production deployment
+
+**Debt.** `POST /admin/seed` wipes and rebuilds the demonstration data, and it is present
+on the live deployment. `POST /admin/drain` likewise forces the outbox worker to run.
+
+**Cause.** Confidence decays with a 45-minute half-life, so seeded data is invisible
+within a few hours. Refreshing it before a demonstration or viva has to be possible, and
+doing it from a browser is markedly more reliable than asking someone to find a terminal
+with the right environment configured.
+
+**Impact.** An endpoint that deletes data exists on a public deployment. It is
+admin-only, and the admin password is published in the submission — which is fine for an
+examination artefact and would be unacceptable anywhere else. `clear_demo_data` only
+removes rows whose identifiers the seed module generates, so real reports would survive,
+but that is a property of the current implementation rather than a guarantee.
+
+**Priority.** Low here, **critical** before any real use.
+
+**Class.** C — critical, in the sense that it must not survive contact with real users.
+Acceptable only because this deployment exists to be marked.
+
+**Proposed resolution.** Remove both endpoints from any non-examination build, gated on
+`ENVIRONMENT != "production"` at router registration so they cannot be reached at all
+rather than merely being protected. Seeding then happens only through
+`scripts/seed_demo.py`, run deliberately by someone with database access.
+
+---
+
+## TD-16 — The rebuild neighbourhood is a heuristic, not a guarantee
+
+**Debt.** When a report arrives, the projector rebuilds incidents within three times the
+clustering radius and time window, then expands to whole incidents. Three is a chosen
+number, not a derived one.
+
+**Cause.** Rebuilding the entire map on every report would be correct and unusably slow.
+Some bound was needed and there is no data to derive one from.
+
+**Impact.** Single-linkage clustering chains (TD-13), so a sufficiently long chain of
+reports could in principle link two incidents that lie outside the neighbourhood of each
+other. The rebuild would then miss a merge that a full recomputation would have found.
+The result would be two adjacent incidents where there should be one — visible on the
+map, and not corrupting anything, but wrong.
+
+**Priority.** Low. It needs a chain of reports each within 300 m of the next, spanning
+more than 900 m, all within 90 minutes. Plausible on a congested corridor; not reachable
+with seeded data.
+
+**Class.** A — acceptable, with the failure mode understood and bounded.
+
+**Proposed resolution.** Expand the neighbourhood iteratively — fetch, cluster, and if
+any cluster touches the edge of the fetched region, widen and repeat until it does not.
+That converges and removes the guess entirely. It was not attempted under time pressure
+because it needs care to stay order-independent.
+
+---
+
+## TD-15 — Noisy-OR assumes reports are independent, and they are not
+
+**Debt.** Confidence combines evidence with noisy-OR, `1 − ∏(1 − wᵢ)`, which treats each
+report as an independent observation.
+
+**Cause.** It is the standard formulation, it has the four structural properties the
+design needs — bounded, monotonic, saturating, order-independent — and no alternative
+could be calibrated without data that does not exist.
+
+**Impact.** **Confidence is systematically overstated when reports come from a crowd.**
+Six people stuck in the same jam are not six independent observations; they are one
+event observed six times, by people who may have seen each other's hazard lights, heard
+the same radio bulletin, or seen the incident already on this map. The bias runs one way
+only — towards over-confidence — which is the more dangerous direction, since it means
+escalating to police on thinner evidence than the number suggests.
+
+**Priority.** Medium. Structural rather than a bug, and the direction of the error is
+known.
+
+**Class.** A — acceptable, with the bias documented rather than hidden.
+
+**Proposed resolution.** Two measures, both needing data first. Discount reports arriving
+after an incident becomes publicly visible on the map, since those reporters may be
+echoing rather than observing. And weight by the spatial spread of reporters — six
+reports from six different approach roads genuinely are more independent than six from
+one queue, and the geometry to measure that is already stored.
+
+---
+
+## TD-13 — Single-linkage clustering chains
+
+**Debt.** Reports are grouped as connected components of a "near in space and time"
+graph. A line of reports each 250 m from the next merges into one incident even if the
+two ends are kilometres apart.
+
+**Cause.** Single linkage is inherent to the connected-components approach, and that
+approach was chosen because it is provably order-independent — the property the whole
+design exists to protect.
+
+**Impact.** On a long congested corridor, several genuinely separate incidents could
+merge into one enormous one. The map would show a single pin where a commuter needs
+three, and the confidence score would be meaningless because it would aggregate
+unrelated events.
+
+**Priority.** Medium. Not reachable with seeded data; likely on a real Accra corridor at
+rush hour, which is exactly when the system matters.
+
+**Class.** A — acceptable for now, with the trade explicitly understood.
+
+**Alternatives considered and rejected.** Complete linkage resists chaining but is far
+more expensive and fragments genuine incidents spanning a junction. DBSCAN handles
+chaining well but reintroduces parameters as unvalidated as the two already present
+(TD-03).
+
+**Proposed resolution.** A maximum-diameter cap applied as a post-pass. It must be a
+post-pass: enforcing a cap *during* merging would reintroduce order dependence and break
+the property the design is built on. The post-pass itself must be order-independent —
+splitting on a deterministic criterion such as the widest pair.
+
+---
+
+## TD-14 — Clustering is O(n²) within each type and time bucket
+
+**Debt.** Every pair of same-type reports is compared. With n reports that is n(n−1)/2
+distance calculations.
+
+**Cause.** Simple, obviously correct, and fast enough at demonstration scale. A spatial
+index would have been premature optimisation before any load existed.
+
+**Impact.** Fine at hundreds of reports, poor at tens of thousands. Recomputing over a
+full day of citywide reports would become noticeably slow.
+
+**Priority.** Low now. **Has an interest rate** — cost grows quadratically with adoption,
+so it worsens fastest exactly when the system succeeds.
+
+**Class.** S — scheduled.
+
+**Proposed resolution.** Two steps, neither of which changes the result. First, bucket by
+time window so only temporally-adjacent reports are compared. Second, use the PostGIS
+GiST index to fetch spatial candidates rather than testing every pair — the index already
+exists for this reason. The connected-components structure is unaffected, so the
+order-independence property survives untouched.
 
 ---
 

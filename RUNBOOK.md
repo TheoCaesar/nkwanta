@@ -225,6 +225,51 @@ Belt and braces. The ping can lapse; the sentence cannot.
 
 ---
 
+## Part 5 — Demonstration data
+
+**Run this shortly before any demonstration or viva.** Confidence halves every 45
+minutes, so data seeded yesterday is invisible today — the map would look empty and an
+examiner would reasonably conclude the system does not work.
+
+### Locally
+
+```bash
+python -m scripts.seed_demo --reset
+```
+
+Creates 16 accounts and 38 reports across 20 real Accra locations, then drains them
+through the ordinary outbox and clustering path. Prints a table of the incidents
+produced. Safe to run repeatedly — identifiers are deterministic, so it updates rather
+than duplicates.
+
+### On the live deployment
+
+Log in at `/docs` as `admin@nkwanta.demo`, then `POST /admin/seed`.
+
+Same code, reachable from a browser. This endpoint should not exist in a real
+deployment and is recorded as **TD-17**.
+
+### What you should see afterwards
+
+| Where | Expect |
+|---|---|
+| `GET /incidents` | About 20 incidents, most believable first |
+| `GET /incidents/queue` | 2 above the escalation threshold |
+| `GET /incidents/{id}` | The contributing reports and the weight each carried |
+| `GET /admin/stats` | Counts, plus whether the worker is running |
+
+The two verified incidents are a six-report collision at Kwame Nkrumah Circle (≈0.88)
+and a five-report closure at Kaneshie Market (≈0.73). The single report at Lapaz scores
+about 0.04 because its reporter has a poor record — that one is worth pointing at
+deliberately, because it is reputation doing its job.
+
+### Useful during a demonstration
+
+`POST /admin/drain` forces the worker to run immediately instead of waiting up to two
+seconds. Submit a report, call it, refresh the map — the incident is there.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
@@ -234,6 +279,8 @@ Belt and braces. The ping can lapse; the sentence cannot.
 | `/ready` says `postgis: missing` | Extension never created | Run `CREATE EXTENSION IF NOT EXISTS postgis;` in the Neon SQL editor |
 | `/ready` says `database: unreachable` | Wrong string, or the project is suspended | Re-copy the **pooled** string from Neon |
 | Render build fails on `alembic upgrade head` | `DATABASE_URL` not set in Render | Add it in the dashboard, then **Manual Deploy → Clear build cache & deploy** |
+| Build succeeds, then `RuntimeError: JWT_SECRET is still the development default` and `Exited with status 3` | **The safeguard working.** `generateValue: true` only fires when Render *creates* a service from the blueprint — an existing service does not pick up newly added variables | Generate one with `python -c "import secrets; print(secrets.token_urlsafe(48))"`, then service → **Environment** → **Add Environment Variable** → `JWT_SECRET`. Render redeploys automatically. |
+| `No open ports detected` | The app exited before binding, so the port never opened. A symptom, not the cause | Scroll **up** in the log to the first traceback — that is the real error |
 | Render deploy succeeds, first request hangs ~50 s | Free tier cold start | Expected. See Part 4. |
 | `AttributeError: module 'bcrypt' has no attribute '__about__'` | `passlib` reinstalled from somewhere | Remove it. This project uses `bcrypt` directly — see `app/security.py`. |
 | `bash: pip: command not found` (Git Bash) | Ran `.venv/Scripts/activate` without `source`, so the shell was never activated | `source .venv/Scripts/activate`, then use `python -m pip` |
