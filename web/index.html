@@ -3,102 +3,631 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Nkwanta — road incident reporting</title>
+<title>Nkwanta — road incident reporting for urban Ghana</title>
+
+<!--
+  One page, no build step, no framework.
+
+  The effort estimate cut the front end to a single page (D-010), which made a separate
+  Vercel deployment pointless — it would have added an account, a build pipeline and CORS
+  configuration and returned nothing. So FastAPI serves this file directly (D-012).
+
+  Everything here talks to the same API documented at /docs. Nothing is special-cased for
+  the page, which is why the generated documentation is a genuine second client rather
+  than a description of one.
+-->
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.css">
 <style>
-  :root { --ink:#14211c; --muted:#5d6b64; --line:#dde3df; --accent:#0f6b4f; --bg:#f7f9f8; }
-  * { box-sizing: border-box; }
-  body { margin:0; font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-         color:var(--ink); background:var(--bg); }
-  header { background:var(--accent); color:#fff; padding:1.5rem 1.25rem; }
-  header h1 { margin:0; font-size:1.4rem; letter-spacing:-0.01em; }
-  header p  { margin:.35rem 0 0; opacity:.85; font-size:.9rem; }
-  main { max-width:52rem; margin:0 auto; padding:1.5rem 1.25rem 3rem; }
-  .card { background:#fff; border:1px solid var(--line); border-radius:10px;
-          padding:1.1rem 1.25rem; margin-bottom:1rem; }
-  .card h2 { margin:0 0 .6rem; font-size:1rem; text-transform:uppercase;
-             letter-spacing:.06em; color:var(--muted); }
-  .status { display:flex; align-items:center; gap:.6rem; font-weight:600; }
-  .dot { width:.7rem; height:.7rem; border-radius:50%; background:#bbb; flex:none; }
-  .dot.ok { background:#1a9d63; } .dot.warn { background:#d9a406; } .dot.err { background:#c2453d; }
-  dl { display:grid; grid-template-columns:auto 1fr; gap:.3rem 1rem; margin:.75rem 0 0;
-       font-size:.9rem; }
-  dt { color:var(--muted); } dd { margin:0; font-variant-numeric:tabular-nums; }
-  code { background:#eef2f0; padding:.12rem .35rem; border-radius:4px; font-size:.85em; }
-  a { color:var(--accent); }
-  footer { color:var(--muted); font-size:.82rem; text-align:center; padding:0 1.25rem 2rem; }
+  :root {
+    --ink:#16211d; --muted:#5f6d67; --line:#dfe5e2; --bg:#f6f8f7; --card:#fff;
+    --green:#0f6e56; --green-soft:#e1f5ee;
+    --blue:#185fa5; --blue-soft:#e6f1fb;
+    --red:#a32d2d; --red-soft:#fcebeb;
+    --amber:#854f0b; --amber-soft:#faeeda;
+    --grey-soft:#eef1f0;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--bg)}
+  header{background:var(--green);color:#fff;padding:.85rem 1.1rem;display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}
+  header h1{margin:0;font-size:1.15rem;font-weight:600;letter-spacing:-.01em}
+  header .sub{font-size:.78rem;opacity:.85;margin-left:.5rem;font-weight:400}
+  #who{font-size:.82rem;display:flex;align-items:center;gap:.6rem}
+  .pill{background:rgba(255,255,255,.18);padding:.15rem .55rem;border-radius:999px;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em}
+  main{max-width:1180px;margin:0 auto;padding:1rem 1.1rem 3rem;display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:1rem;align-items:start}
+  @media (max-width:880px){main{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.9rem 1rem;margin-bottom:1rem}
+  .card h2{margin:0 0 .7rem;font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
+  #map{height:420px;border-radius:8px;background:var(--grey-soft)}
+  .row{display:flex;justify-content:space-between;gap:.7rem;padding:.55rem 0;border-bottom:1px solid var(--line);align-items:flex-start}
+  .row:last-child{border-bottom:0}
+  .row .t{font-weight:500;font-size:.9rem}
+  .row .m{font-size:.78rem;color:var(--muted);margin-top:.12rem}
+  .tag{font-size:.7rem;padding:.15rem .5rem;border-radius:5px;white-space:nowrap;font-weight:500}
+  .tag.verified{background:var(--red-soft);color:var(--red)}
+  .tag.corroborated{background:var(--amber-soft);color:var(--amber)}
+  .tag.reported{background:var(--grey-soft);color:var(--muted)}
+  .tag.assigned{background:var(--blue-soft);color:var(--blue)}
+  .tag.resolved{background:var(--green-soft);color:var(--green)}
+  label{display:block;font-size:.75rem;color:var(--muted);margin:.55rem 0 .18rem}
+  input,select,textarea,button{font:inherit;width:100%;padding:.45rem .6rem;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink)}
+  textarea{resize:vertical;min-height:52px}
+  button{background:var(--green);color:#fff;border:0;font-weight:500;cursor:pointer;padding:.55rem}
+  button:hover{filter:brightness(1.08)} button:disabled{opacity:.5;cursor:default}
+  button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);font-weight:400}
+  button.sm{width:auto;padding:.28rem .6rem;font-size:.78rem}
+  .inline{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
+  .note{font-size:.75rem;color:var(--muted);margin-top:.5rem;line-height:1.5}
+  .msg{padding:.5rem .65rem;border-radius:6px;font-size:.82rem;margin-top:.6rem;display:none}
+  .msg.ok{background:var(--green-soft);color:var(--green);display:block}
+  .msg.err{background:var(--red-soft);color:var(--red);display:block}
+  .empty{color:var(--muted);font-size:.83rem;padding:.5rem 0}
+  .hide{display:none !important}
+  .legend{display:flex;gap:.9rem;flex-wrap:wrap;font-size:.74rem;color:var(--muted);margin-top:.55rem}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:.3rem;vertical-align:1px}
+  .bar{height:5px;background:var(--grey-soft);border-radius:3px;overflow:hidden;margin-top:.3rem}
+  .bar>i{display:block;height:100%;background:var(--green)}
+  .tabs{display:flex;gap:.3rem;margin-bottom:.7rem;flex-wrap:wrap}
+  .tabs button{width:auto;background:transparent;color:var(--muted);border:1px solid var(--line);font-size:.78rem;padding:.28rem .65rem}
+  .tabs button[aria-selected="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+  footer{text-align:center;color:var(--muted);font-size:.75rem;padding:0 1rem 2rem}
+  a{color:var(--green)}
 </style>
 </head>
 <body>
+
 <header>
-  <h1>Nkwanta</h1>
-  <p>Road incident reporting and dispatch — Twi for <em>junction</em></p>
+  <div><h1>Nkwanta<span class="sub">road incident reporting · urban Ghana</span></h1></div>
+  <div id="who"></div>
 </header>
 
 <main>
-  <div class="card">
-    <h2>Service status</h2>
-    <div class="status"><span class="dot" id="dot"></span><span id="state">checking…</span></div>
-    <dl id="detail"></dl>
+  <!-- ============ LEFT ============ -->
+  <div>
+    <div class="card">
+      <h2>Live incidents</h2>
+      <div id="map"></div>
+      <div class="legend">
+        <span><i class="dot" style="background:#a32d2d"></i>verified</span>
+        <span><i class="dot" style="background:#ba7517"></i>corroborated</span>
+        <span><i class="dot" style="background:#888780"></i>unconfirmed</span>
+        <span><i class="dot" style="background:#185fa5"></i>warden assigned</span>
+      </div>
+      <p class="note" id="mapnote">Circle size follows confidence. Click a pin for the evidence behind it.</p>
+    </div>
+
+    <div class="card">
+      <h2>Incidents <span id="count" style="color:var(--muted);font-weight:400"></span></h2>
+      <div id="incidents"><div class="empty">Loading…</div></div>
+    </div>
+
+    <div class="card" id="detailcard" hidden>
+      <h2>Why this score</h2>
+      <div id="detail"></div>
+    </div>
   </div>
 
-  <div class="card">
-    <h2>What this is</h2>
-    <p style="margin:0">
-      Road users report what is blocking traffic — accidents, floods, closures, failed
-      traffic lights, roadworks. The system works out which reports describe the same
-      real event, scores how believable it is, warns commuters heading that way, and
-      queues a job for the police or a traffic warden.
-    </p>
-    <p style="margin:.75rem 0 0">
-      Interactive API documentation: <a href="/docs">/docs</a>
-    </p>
-  </div>
+  <!-- ============ RIGHT ============ -->
+  <div>
+    <!-- signed out -->
+    <div class="card" id="authcard">
+      <h2>Sign in</h2>
+      <div class="tabs" role="tablist">
+        <button role="tab" aria-selected="true" data-auth="login">Sign in</button>
+        <button role="tab" aria-selected="false" data-auth="register">Create account</button>
+      </div>
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="username" placeholder="commuter@nkwanta.demo">
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password" placeholder="NkwantaDemo2026">
+      <div id="nameRow" class="hide">
+        <label for="dname">Display name</label>
+        <input id="dname" placeholder="Ama Owusu">
+      </div>
+      <div style="margin-top:.7rem"><button id="authBtn">Sign in</button></div>
+      <div class="msg" id="authMsg"></div>
+      <p class="note">
+        Demonstration accounts, password <code>NkwantaDemo2026</code>:<br>
+        <code>commuter@</code>, <code>officer@</code>, <code>warden@</code>,
+        <code>admin@nkwanta.demo</code>
+      </p>
+    </div>
 
-  <div class="card">
-    <h2>Build status</h2>
-    <p style="margin:0">
-      Skeleton deployed. The map, report form and dispatch queue arrive with
-      <code>B22</code>. Deploying early and empty is deliberate — it retires the
-      largest risk in the schedule first.
-    </p>
+    <!-- report -->
+    <div class="card hide" id="reportcard">
+      <h2>Report an incident</h2>
+      <label for="itype">What is blocking the road</label>
+      <select id="itype">
+        <option value="accident">Accident</option>
+        <option value="flood">Flooding</option>
+        <option value="closure">Road closure</option>
+        <option value="signal_outage">Traffic lights out</option>
+        <option value="roadworks">Roadworks</option>
+        <option value="surface_defect">Damaged road surface</option>
+      </select>
+      <label>Location</label>
+      <div class="inline">
+        <button class="ghost sm" id="pickBtn" type="button">Pick on map</button>
+        <button class="ghost sm" id="hereBtn" type="button">Use my location</button>
+      </div>
+      <div id="coords" class="note">No location chosen yet.</div>
+      <label for="note">Note (optional)</label>
+      <textarea id="note" maxlength="500" placeholder="Two lanes blocked, backed up to Odorna"></textarea>
+
+      <label>Voice note (optional)</label>
+      <div class="inline">
+        <button class="ghost sm" id="recBtn" type="button">Start recording</button>
+        <span class="note" id="recState" style="margin:0">Not recording.</span>
+      </div>
+      <label class="inline" style="margin-top:.45rem;font-size:.78rem;color:var(--ink)">
+        <input type="checkbox" id="sharevoice" style="width:auto;margin:0 .4rem 0 0">
+        Let other commuters hear this recording
+      </label>
+      <p class="note" style="margin-top:.2rem">
+        Off by default. A recording identifies your voice, so it stays private unless you
+        choose otherwise — and you can change your mind later.
+      </p>
+
+      <div style="margin-top:.7rem"><button id="sendBtn">Submit report</button></div>
+      <div class="msg" id="reportMsg"></div>
+      <p class="note">
+        Never type while driving. Hand the phone to a passenger, or hold the record button
+        and speak.
+      </p>
+    </div>
+
+    <!-- notifications -->
+    <div class="card hide" id="notifcard">
+      <h2>Your alerts <span id="unread" style="color:var(--red);font-weight:600"></span></h2>
+      <div id="notifs"></div>
+      <div style="margin-top:.6rem"><button class="ghost sm" id="readBtn">Mark all read</button></div>
+    </div>
+
+    <!-- corridors -->
+    <div class="card hide" id="corridorcard">
+      <h2>Roads you travel</h2>
+      <div id="corridors"></div>
+      <p class="note">Follow a road and you will be warned when something blocks it.</p>
+    </div>
+
+    <!-- dispatch -->
+    <div class="card hide" id="queuecard">
+      <h2>Dispatch queue</h2>
+      <div id="queue"></div>
+      <p class="note">Only verified incidents appear here. Confidence must reach 0.70 before a warden can be sent.</p>
+    </div>
+
+    <!-- warden -->
+    <div class="card hide" id="assignedcard">
+      <h2>Assigned to you</h2>
+      <div id="assigned"></div>
+    </div>
   </div>
 </main>
 
-<footer>CSCD602 Advanced Software Engineering — University of Ghana</footer>
+<footer>
+  Nkwanta — CSCD602 Advanced Software Engineering, University of Ghana ·
+  <a href="/docs">API documentation</a> · <a href="/ready">service status</a>
+</footer>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.js"></script>
 <script>
-(async () => {
-  const dot = document.getElementById('dot');
-  const state = document.getElementById('state');
-  const detail = document.getElementById('detail');
-  const row = (k, v) => `<dt>${k}</dt><dd>${v}</dd>`;
+"use strict";
 
+// ---------------------------------------------------------------------------
+// State. The token lives in sessionStorage so a page refresh does not sign you
+// out mid-demonstration. localStorage would survive longer and is the common
+// choice, but it is also readable by any injected script — sessionStorage at
+// least dies with the tab. Recorded as debt: a httpOnly cookie is the right
+// answer and needs CSRF protection to go with it.
+// ---------------------------------------------------------------------------
+const S = {
+  token: sessionStorage.getItem("nk_token") || null,
+  user: null,
+  picked: null,
+  recorder: null,
+  chunks: [],
+  audio: null,
+  map: null,
+  markers: [],
+  picking: false,
+};
+
+const $ = (id) => document.getElementById(id);
+const ACCRA = [-0.187, 5.603];
+
+async function api(path, opts = {}) {
+  const headers = opts.headers || {};
+  if (S.token) headers["Authorization"] = "Bearer " + S.token;
+  if (opts.body && !(opts.body instanceof FormData)) headers["Content-Type"] = "application/json";
+  const res = await fetch(path, { ...opts, headers });
+  if (res.status === 204) return null;
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!res.ok) throw new Error((data && data.detail) || res.statusText);
+  return data;
+}
+
+function show(el, on) { $(el).classList.toggle("hide", !on); }
+function flash(el, message, ok) {
+  const n = $(el);
+  n.textContent = message;
+  n.className = "msg " + (ok ? "ok" : "err");
+  setTimeout(() => { n.className = "msg"; }, 5000);
+}
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+const ago = (iso) => {
+  const m = Math.round((Date.now() - new Date(iso)) / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return m + " min ago";
+  const h = Math.floor(m / 60);
+  return h < 24 ? h + "h ago" : Math.floor(h / 24) + "d ago";
+};
+const TYPE_LABEL = {
+  accident:"Accident", flood:"Flooding", closure:"Road closure",
+  signal_outage:"Traffic lights out", roadworks:"Roadworks", surface_defect:"Road surface",
+};
+const STATUS_COLOUR = {
+  verified:"#a32d2d", corroborated:"#ba7517", reported:"#888780",
+  assigned:"#185fa5", resolved:"#0f6e56",
+};
+
+// ---------------------------------------------------------------------------
+// Map
+// ---------------------------------------------------------------------------
+function initMap() {
   try {
-    const [h, r] = await Promise.all([
-      fetch('/health').then(x => x.json()),
-      fetch('/ready').then(x => x.json())
-    ]);
-
-    const cls = r.status === 'ok' ? 'ok' : r.status === 'degraded' ? 'warn' : 'err';
-    dot.className = 'dot ' + cls;
-    state.textContent = r.status === 'ok'
-      ? 'Running — database connected'
-      : r.status === 'degraded'
-        ? 'Running — ' + (r.detail || 'database not ready')
-        : 'Error — ' + (r.detail || 'unknown');
-
-    detail.innerHTML =
-      row('Version', h.version) +
-      row('Environment', h.environment) +
-      row('Uptime', h.uptime_seconds + ' s') +
-      row('Database', r.database) +
-      row('PostGIS', r.postgis);
-  } catch (e) {
-    dot.className = 'dot err';
-    state.textContent = 'Cannot reach the API';
-    detail.innerHTML = row('Error', e.message);
+    S.map = new maplibregl.Map({
+      container: "map",
+      style: {
+        version: 8,
+        sources: {
+          osm: {
+            type: "raster",
+            tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+            tileSize: 256,
+            attribution: "© OpenStreetMap contributors",
+          },
+        },
+        layers: [{ id: "osm", type: "raster", source: "osm" }],
+      },
+      center: ACCRA,
+      zoom: 10.5,
+      attributionControl: true,
+    });
+    S.map.addControl(new maplibregl.NavigationControl(), "top-right");
+    S.map.on("click", (e) => { if (S.picking) setPicked(e.lngLat.lat, e.lngLat.lng); });
+  } catch (err) {
+    // The page must still work if tiles or the library fail to load. The list
+    // below the map carries the same information.
+    $("map").innerHTML =
+      '<div style="padding:1rem;color:#5f6d67;font-size:.85rem">' +
+      "Map could not load. The incident list below shows the same data.</div>";
   }
-})();
+}
+
+function drawPins(incidents) {
+  if (!S.map) return;
+  S.markers.forEach(m => m.remove());
+  S.markers = [];
+  incidents.forEach(inc => {
+    const size = 12 + Math.round(inc.confidence * 20);
+    const el = document.createElement("div");
+    el.style.cssText =
+      `width:${size}px;height:${size}px;border-radius:50%;cursor:pointer;` +
+      `background:${STATUS_COLOUR[inc.status] || "#888"};opacity:.85;` +
+      `border:2px solid rgba(255,255,255,.9)`;
+    el.title = `${TYPE_LABEL[inc.incident_type]} — confidence ${inc.confidence.toFixed(2)}`;
+    el.onclick = () => openDetail(inc.id);
+    S.markers.push(new maplibregl.Marker({ element: el })
+      .setLngLat([inc.longitude, inc.latitude]).addTo(S.map));
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Incidents
+// ---------------------------------------------------------------------------
+async function loadIncidents() {
+  try {
+    const list = await api("/incidents?limit=200");
+    $("count").textContent = list.length ? `· ${list.length}` : "";
+    drawPins(list);
+    $("incidents").innerHTML = list.length ? list.map(inc => `
+      <div class="row">
+        <div>
+          <div class="t">${esc(TYPE_LABEL[inc.incident_type] || inc.incident_type)}</div>
+          <div class="m">${inc.report_count} report${inc.report_count === 1 ? "" : "s"}
+            · ${ago(inc.last_reported_at)} · confidence ${inc.confidence.toFixed(2)}</div>
+          <div class="bar" style="width:130px"><i style="width:${Math.round(inc.confidence*100)}%"></i></div>
+        </div>
+        <div style="text-align:right">
+          <span class="tag ${inc.status}">${inc.status.replace("_"," ")}</span><br>
+          <button class="ghost sm" style="margin-top:.35rem" onclick="openDetail('${inc.id}')">Evidence</button>
+        </div>
+      </div>`).join("") : '<div class="empty">Nothing reported. The roads are clear.</div>';
+  } catch (err) {
+    $("incidents").innerHTML = `<div class="empty">Could not load incidents: ${esc(err.message)}</div>`;
+  }
+}
+
+async function openDetail(id) {
+  try {
+    const inc = await api("/incidents/" + id);
+    $("detailcard").hidden = false;
+    const rows = inc.evidence.map(e => `
+      <div class="row">
+        <div>
+          <div class="t">${esc(e.reporter_name)}</div>
+          <div class="m">reputation ${e.reporter_reputation.toFixed(2)} · ${ago(e.occurred_at)}</div>
+        </div>
+        <div style="text-align:right;font-variant-numeric:tabular-nums">${e.weight.toFixed(3)}</div>
+      </div>`).join("");
+    $("detail").innerHTML = `
+      <div style="margin-bottom:.6rem">
+        <strong>${esc(TYPE_LABEL[inc.incident_type])}</strong>
+        <span class="tag ${inc.status}" style="margin-left:.4rem">${inc.status.replace("_"," ")}</span>
+        <div class="m">confidence ${inc.confidence.toFixed(3)} from ${inc.report_count} report(s)</div>
+      </div>
+      ${rows}
+      <p class="note">
+        Each report counts for its reporter's reliability, reduced by how long ago it was
+        made — the half-life is 45 minutes. Older reports weigh less, so an incident
+        nobody confirms fades off the map on its own.
+      </p>`;
+    $("detailcard").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  } catch (err) {
+    flash("reportMsg", err.message, false);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
+let authMode = "login";
+document.querySelectorAll("[data-auth]").forEach(b => {
+  b.onclick = () => {
+    authMode = b.dataset.auth;
+    document.querySelectorAll("[data-auth]").forEach(x =>
+      x.setAttribute("aria-selected", String(x === b)));
+    $("nameRow").classList.toggle("hide", authMode === "login");
+    $("authBtn").textContent = authMode === "login" ? "Sign in" : "Create account";
+  };
+});
+
+$("authBtn").onclick = async () => {
+  const email = $("email").value.trim(), password = $("password").value;
+  if (!email || !password) return flash("authMsg", "Email and password are required.", false);
+  try {
+    const body = authMode === "login"
+      ? { email, password }
+      : { email, password, display_name: $("dname").value.trim() || email.split("@")[0] };
+    const res = await api("/auth/" + authMode, { method: "POST", body: JSON.stringify(body) });
+    S.token = res.access_token;
+    sessionStorage.setItem("nk_token", S.token);
+    await afterSignIn();
+  } catch (err) { flash("authMsg", err.message, false); }
+};
+
+async function afterSignIn() {
+  S.user = await api("/auth/me");
+  const officer = ["officer", "admin"].includes(S.user.role);
+  $("who").innerHTML =
+    `<span>${esc(S.user.display_name)}</span><span class="pill">${esc(S.user.role)}</span>` +
+    `<button class="ghost sm" onclick="signOut()">Sign out</button>`;
+  show("authcard", false);
+  show("reportcard", true);
+  show("notifcard", true);
+  show("corridorcard", true);
+  show("queuecard", officer);
+  show("assignedcard", S.user.role === "warden");
+  await Promise.all([
+    loadNotifications(), loadCorridors(),
+    officer ? loadQueue() : null,
+    S.user.role === "warden" ? loadAssigned() : null,
+  ]);
+}
+
+function signOut() {
+  S.token = null; S.user = null;
+  sessionStorage.removeItem("nk_token");
+  $("who").innerHTML = "";
+  ["reportcard","notifcard","corridorcard","queuecard","assignedcard"].forEach(c => show(c, false));
+  show("authcard", true);
+}
+window.signOut = signOut;
+window.openDetail = openDetail;
+
+// ---------------------------------------------------------------------------
+// Reporting
+// ---------------------------------------------------------------------------
+function setPicked(lat, lng) {
+  S.picked = { lat, lng };
+  S.picking = false;
+  $("pickBtn").textContent = "Pick on map";
+  $("coords").textContent = `Chosen: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+}
+
+$("pickBtn").onclick = () => {
+  S.picking = !S.picking;
+  $("pickBtn").textContent = S.picking ? "Click the map…" : "Pick on map";
+};
+
+$("hereBtn").onclick = () => {
+  if (!navigator.geolocation) return flash("reportMsg", "This browser cannot report a location.", false);
+  navigator.geolocation.getCurrentPosition(
+    p => setPicked(p.coords.latitude, p.coords.longitude),
+    () => flash("reportMsg", "Location permission refused — pick on the map instead.", false));
+};
+
+$("recBtn").onclick = async () => {
+  if (S.recorder && S.recorder.state === "recording") {
+    S.recorder.stop();
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    S.chunks = [];
+    S.recorder = new MediaRecorder(stream);
+    S.recorder.ondataavailable = e => S.chunks.push(e.data);
+    S.recorder.onstop = () => {
+      S.audio = new Blob(S.chunks, { type: S.recorder.mimeType || "audio/webm" });
+      stream.getTracks().forEach(t => t.stop());
+      $("recBtn").textContent = "Re-record";
+      $("recState").textContent = `Recorded ${Math.round(S.audio.size / 1024)} KB.`;
+    };
+    S.recorder.start();
+    $("recBtn").textContent = "Stop";
+    $("recState").textContent = "Recording… release when done.";
+  } catch {
+    flash("reportMsg", "Microphone unavailable. A written note works too.", false);
+  }
+};
+
+$("sendBtn").onclick = async () => {
+  if (!S.picked) return flash("reportMsg", "Choose a location first.", false);
+  $("sendBtn").disabled = true;
+  try {
+    const res = await api("/reports", {
+      method: "POST",
+      body: JSON.stringify({
+        incident_type: $("itype").value,
+        latitude: S.picked.lat,
+        longitude: S.picked.lng,
+        note: $("note").value.trim() || null,
+        idempotency_key: crypto.randomUUID(),
+      }),
+    });
+
+    if (S.audio) {
+      const fd = new FormData();
+      fd.append("file", S.audio, "voice.webm");
+      fd.append("share_publicly", String($("sharevoice").checked));
+      await api(`/reports/${res.report.id}/voice`, { method: "POST", body: fd });
+    }
+
+    flash("reportMsg", res.duplicate
+      ? "You had already sent that report."
+      : "Reported. It will appear on the map within a couple of seconds.", true);
+    $("note").value = ""; S.audio = null; S.chunks = [];
+    $("recBtn").textContent = "Start recording"; $("recState").textContent = "Not recording.";
+    setTimeout(loadIncidents, 2500);
+  } catch (err) {
+    flash("reportMsg", err.message, false);
+  } finally {
+    $("sendBtn").disabled = false;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Notifications, corridors, dispatch
+// ---------------------------------------------------------------------------
+async function loadNotifications() {
+  const [list, count] = await Promise.all([
+    api("/notifications?limit=30"), api("/notifications/count"),
+  ]);
+  $("unread").textContent = count.unread ? `· ${count.unread} new` : "";
+  $("notifs").innerHTML = list.length ? list.map(n => `
+    <div class="row">
+      <div>
+        <div class="t" style="font-weight:${n.read_at ? 400 : 500}">${esc(n.message)}</div>
+        <div class="m">${ago(n.created_at)}</div>
+      </div>
+    </div>`).join("") :
+    '<div class="empty">No alerts. Follow a road below to be warned about it.</div>';
+}
+
+$("readBtn").onclick = async () => { await api("/notifications/read", { method: "POST" }); loadNotifications(); };
+
+async function loadCorridors() {
+  const list = await api("/corridors");
+  $("corridors").innerHTML = list.map(c => `
+    <div class="row">
+      <div>
+        <div class="t">${esc(c.name)}</div>
+        <div class="m">${esc(c.description || "")}</div>
+      </div>
+      <button class="ghost sm" onclick="toggleFollow('${c.id}', ${c.following})">
+        ${c.following ? "Following" : "Follow"}
+      </button>
+    </div>`).join("");
+}
+
+window.toggleFollow = async (id, following) => {
+  await api(`/corridors/${id}/follow`, { method: following ? "DELETE" : "PUT" });
+  loadCorridors();
+};
+
+async function loadQueue() {
+  const [queue, wardens] = await Promise.all([
+    api("/incidents/queue"), api("/incidents/wardens/available"),
+  ]);
+  const options = wardens.map(w => `<option value="${w.id}">${esc(w.display_name)}</option>`).join("");
+  $("queue").innerHTML = queue.length ? queue.map(i => `
+    <div class="row">
+      <div style="flex:1">
+        <div class="t">${esc(TYPE_LABEL[i.incident_type])}</div>
+        <div class="m">${i.report_count} reports · confidence ${i.confidence.toFixed(2)} · ${ago(i.last_reported_at)}</div>
+        ${i.status === "verified" ? `
+          <div class="inline" style="margin-top:.4rem">
+            <select id="w_${i.id}" style="width:auto;font-size:.78rem;padding:.25rem">${options}</select>
+            <button class="sm" onclick="assign('${i.id}')">Send warden</button>
+          </div>` : `
+          <div class="inline" style="margin-top:.4rem">
+            <button class="ghost sm" onclick="resolve('${i.id}','confirmed')">Road now clear</button>
+            <button class="ghost sm" onclick="resolve('${i.id}','false_alarm')">Nothing there</button>
+          </div>`}
+      </div>
+      <span class="tag ${i.status}">${i.status.replace("_"," ")}</span>
+    </div>`).join("") :
+    '<div class="empty">Nothing needs a warden. Incidents appear here once confidence reaches 0.70.</div>';
+}
+
+window.assign = async (id) => {
+  try {
+    await api(`/incidents/${id}/assign`, {
+      method: "POST", body: JSON.stringify({ warden_id: $("w_" + id).value }),
+    });
+    await Promise.all([loadQueue(), loadIncidents()]);
+  } catch (err) { alert(err.message); }
+};
+
+window.resolve = async (id, resolution) => {
+  try {
+    const res = await api(`/incidents/${id}/resolve`, {
+      method: "POST", body: JSON.stringify({ resolution }),
+    });
+    const moved = res.reputations_updated
+      .map(r => `${r.display_name} → ${r.reputation.toFixed(2)}`).join(", ");
+    alert(moved
+      ? `Closed. Reporter standing updated:\n${moved}\n\nEveryone who was warned has been told the road is clear.`
+      : "Closed.");
+    await Promise.all([loadQueue(), loadAssigned(), loadIncidents()]);
+  } catch (err) { alert(err.message); }
+};
+
+async function loadAssigned() {
+  if (!S.user || S.user.role !== "warden") return;
+  const list = await api("/incidents/assigned/mine");
+  $("assigned").innerHTML = list.length ? list.map(i => `
+    <div class="row">
+      <div>
+        <div class="t">${esc(TYPE_LABEL[i.incident_type])}</div>
+        <div class="m">${i.report_count} reports · confidence ${i.confidence.toFixed(2)}</div>
+        <div class="inline" style="margin-top:.4rem">
+          <button class="ghost sm" onclick="resolve('${i.id}','confirmed')">Road now clear</button>
+          <button class="ghost sm" onclick="resolve('${i.id}','false_alarm')">Nothing there</button>
+        </div>
+      </div>
+    </div>`).join("") : '<div class="empty">Nothing assigned to you.</div>';
+}
+
+// ---------------------------------------------------------------------------
+// Start
+// ---------------------------------------------------------------------------
+initMap();
+loadIncidents();
+setInterval(loadIncidents, 20000);
+if (S.token) afterSignIn().catch(signOut);
 </script>
 </body>
 </html>

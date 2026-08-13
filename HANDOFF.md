@@ -9,6 +9,96 @@ what comes next.
 
 ---
 
+## 13 August 2026 — Session 16: B22 the web page — the build is complete
+
+### What happened
+
+**The last build item.** One static HTML page, no framework, no build step, served
+directly by FastAPI (D-012). Everything it does goes through the same API documented at
+`/docs` — nothing is special-cased for the page, which is what makes the generated
+documentation a genuine second client rather than a description of one.
+
+What is on it: a MapLibre map with incident pins sized and coloured by confidence and
+status; an incident list; an evidence panel showing *why* a score is what it is; a report
+form with map-pick, browser geolocation and voice recording; a notifications panel;
+corridor follow and unfollow; the officer dispatch queue with warden assignment; and the
+warden's own assignment list with resolve buttons.
+
+**Everything is now reachable from a browser** — including the pieces built earlier that
+had only ever been exercised through `/docs`.
+
+### Choices worth defending
+
+**The page must work when the network does not.** MapLibre loads from a CDN and tiles come
+from OpenStreetMap; either can fail on a poor connection, which is precisely the connection
+this system's users have. The map is wrapped in a try/catch and degrades to a message,
+while the incident list below carries the same information. Tested.
+
+**Incidents load without signing in.** A commuter checking the road ahead should not have
+to create an account first. `loadIncidents()` runs at startup outside any auth branch.
+
+**Voice sharing is unticked in the markup**, with a sentence explaining that a recording
+identifies your voice. Consent given, never assumed — including by a pre-ticked box.
+
+**Every user-supplied string is escaped** before reaching `innerHTML`. Display names, notes
+and messages all come from users; without escaping, a display name containing a script tag
+would execute. There is a test asserting `esc()` wraps each of them.
+
+**The token lives in `sessionStorage`, not `localStorage`.** Neither is ideal — a httpOnly
+cookie is the right answer and needs CSRF protection with it — but the weaker option should
+not be chosen by accident. Recorded as debt.
+
+### A small lesson from the test suite
+
+`test_the_token_is_not_kept_in_local_storage` failed on its first run — because the word
+`localStorage` appears in the **comment explaining why it was avoided**. The test matched
+prose rather than code.
+
+Fixed by checking for `localStorage.` with the dot, which distinguishes use from mention.
+Minor, and worth recording: a test that greps source text is testing the documentation as
+well as the behaviour, and needs to be written knowing that.
+
+### Verified
+
+| Check | Result |
+|---|---|
+| Full suite | **322 passed, 8 skipped** |
+| Every endpoint the page calls exists in the API schema | pass |
+| Page calls at least 10 endpoints (meta-test) | pass |
+| Map failure does not take the page down | pass |
+| Incidents load signed out | pass |
+| Voice sharing unchecked in markup | pass |
+| User text escaped before `innerHTML` | pass |
+| No token or secret embedded | pass |
+
+The "every endpoint exists" test is the useful one: a static page has no compiler, so
+renaming a route silently breaks a button and nothing complains until someone clicks it.
+
+### Where the build stands
+
+All planned work is done: B01–B09, D, and enhancements A, B, C, D, E, F.
+**322 tests, 8 integration tests skipped without a database, 34 API endpoints,
+7 migrations, 35 dated decisions, 22 technical debt items, 9 module explainers.**
+
+### Unresolved
+
+1. **Migrations not applied and nothing pushed since session 14.** `alembic upgrade head`,
+   reseed, commit, push.
+2. Clearance has **no integration test** and is **not visible in the seeded demo** —
+   seeded incidents are too recent to expire and none are resolved.
+3. Keep-warm ping still not configured.
+4. `sessionStorage` for the token — debt, not yet written up.
+
+### Next actions, in order
+
+1. `alembic upgrade head`, `python -m scripts.seed_demo --reset`, `pytest`, commit, push,
+   then open the live page and click through it
+2. Integration test for clearance, and a seeded resolved incident so the demo shows it
+3. The remaining submission documents: SRS, Testing Report, Technical Debt Plan, User
+   Manual, consolidated Project Documentation
+
+---
+
 ## 13 August 2026 — Session 15: clearance notifications and the circuit breaker
 
 ### What happened

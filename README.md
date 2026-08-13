@@ -142,8 +142,11 @@ see D-012.
 
 ## Status
 
-**Live at [nkwanta.onrender.com](https://nkwanta.onrender.com/). 143 tests passing, 53 of
-them property-based.**
+**Live at [nkwanta.onrender.com](https://nkwanta.onrender.com/). 322 tests passing.**
+
+34 API endpoints · 7 migrations · 35 dated decisions · 22 technical debt items ·
+9 module explainers · property-based tests for clustering, confidence, the lifecycle and
+the circuit breaker.
 
 | Step | State |
 |---|---|
@@ -159,7 +162,7 @@ them property-based.**
 | F voice notes, photos, evidence bonus | done |
 | B corridor subscriptions and advisory | done |
 | C circuit breaker, clearance notifications | done |
-| B22 the web page | next — the last build item |
+| B22 the web page | done — **the build is complete** |
 
 The estimate that shaped all of this: Use Case Points puts full scope at **1,948
 person-hours**, roughly forty times the original examination window. The deliverable is
