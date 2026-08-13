@@ -44,6 +44,7 @@ urgent than debt that merely sits there.
 | TD-12 | Single shared database, no read replica or partitioning | A | Low | Design |
 | TD-13 | Single-linkage clustering chains along a corridor | A | Medium | B05 |
 | TD-14 | Clustering is O(n²) within each type bucket | S | Low | B05 |
+| TD-15 | Noisy-OR assumes independent reports; crowds overstate confidence | A | Medium | B06 |
 
 Items added during B02 onward are appended in build order.
 
@@ -122,6 +123,35 @@ stretch of the Tema Motorway.
 (they are already read from environment variables, so this is a data change rather than a
 code change). Then tune against labelled real incidents once any exist. Flooding needs a
 materially wider radius than a collision.
+
+---
+
+## TD-15 — Noisy-OR assumes reports are independent, and they are not
+
+**Debt.** Confidence combines evidence with noisy-OR, `1 − ∏(1 − wᵢ)`, which treats each
+report as an independent observation.
+
+**Cause.** It is the standard formulation, it has the four structural properties the
+design needs — bounded, monotonic, saturating, order-independent — and no alternative
+could be calibrated without data that does not exist.
+
+**Impact.** **Confidence is systematically overstated when reports come from a crowd.**
+Six people stuck in the same jam are not six independent observations; they are one
+event observed six times, by people who may have seen each other's hazard lights, heard
+the same radio bulletin, or seen the incident already on this map. The bias runs one way
+only — towards over-confidence — which is the more dangerous direction, since it means
+escalating to police on thinner evidence than the number suggests.
+
+**Priority.** Medium. Structural rather than a bug, and the direction of the error is
+known.
+
+**Class.** A — acceptable, with the bias documented rather than hidden.
+
+**Proposed resolution.** Two measures, both needing data first. Discount reports arriving
+after an incident becomes publicly visible on the map, since those reporters may be
+echoing rather than observing. And weight by the spatial spread of reporters — six
+reports from six different approach roads genuinely are more independent than six from
+one queue, and the geometry to measure that is already stored.
 
 ---
 

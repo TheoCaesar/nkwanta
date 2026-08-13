@@ -9,6 +9,90 @@ what comes next.
 
 ---
 
+## 13 August 2026 — Session 8: B06 confidence, submission file created
+
+### What happened
+
+**Live deployment confirmed working.** `https://nkwanta.onrender.com/` returns a green
+status with `PostGIS 3.6.0` in production. Deployment is retired as a risk.
+
+**`Deployment_and_Source_Links.txt` created** — one of the six required submission files.
+Student: Theophilus Caesar, 22424543. Title: *Nkwanta: A Road Incident Reporting and
+Dispatch System for Urban Ghana*. Repository `github.com/TheoCaesar/nkwanta`. The file
+opens with the free-tier cold-start warning so an examiner does not conclude the
+application is broken, explains the four roles, and ends with a five-minute walkthrough
+pointing at the parts worth seeing — including the swapped-coordinates rejection.
+
+**B06 — confidence scoring.** Each report contributes
+`reputation × decay(age) × evidence_strength`, and those weights combine with **noisy-OR**:
+`1 − ∏(1 − wᵢ)`, read as "the probability that at least one reporter is right".
+
+Chosen over summing weights, which fails twice: it exceeds 1, and it treats the hundredth
+report as worth as much as the second. Noisy-OR is bounded, monotonic and saturating with
+**no clamping anywhere** — and because multiplication is commutative, it is
+order-independent, matching the guarantee clustering makes. Recorded as **D-023**.
+
+The 0.45 evidence cap is what forces corroboration. Even a perfectly trusted reporter
+alone scores 0.427 against a 0.70 threshold, so police are never summoned on one
+person's word. Directly tested.
+
+### Calibration — measured, not assumed
+
+Confidence for *n* fresh reports:
+
+| n | rep 0.30 | rep 0.50 | rep 0.95 |
+|---:|---:|---:|---:|
+| 1 | 0.135 | 0.225 | 0.427 |
+| 3 | 0.353 | 0.535 | **0.812** |
+| 5 | 0.516 | **0.720** | 0.938 |
+| 8 | 0.687 | 0.870 | 0.988 |
+
+One unknown reporter alerts nobody. Five ordinary reporters reach the police. Three
+consistently reliable ones get there faster — which is the entire purpose of tracking
+reputation. Discredited accounts need eight or more, so someone inventing closures from
+home cannot get there alone.
+
+A single average report decays 0.225 → 0.113 at 45 minutes → 0.001 at six hours. **That
+is what makes incidents clear themselves**, with nobody pressing a button.
+
+### Verified
+
+| Check | Result |
+|---|---|
+| Full suite | **143 passed** (53 property-based) |
+| Order independence of the score | pass, bit-for-bit identical |
+| Bounded [0,1] with no clamping in the code | pass |
+| More evidence never lowers confidence | pass |
+| Each further report adds less than the last | pass |
+| No single report can verify alone | pass |
+| Live deployment | **green, PostGIS 3.6.0** |
+
+New debt: **TD-15** — noisy-OR assumes independent reports and they are not. Six people
+in one jam are one event seen six times, so confidence is systematically overstated for
+crowds. The bias runs towards over-confidence, which is the more dangerous direction.
+Recorded with two proposed mitigations rather than hidden.
+
+Explainer written: `04-confidence-and-decay.md`.
+
+### Unresolved
+
+1. Confidence and clustering are both pure modules with **no caller yet**. They start
+   running for real at B09, the outbox worker.
+2. Clustering and confidence parameters remain guesses fitted to no data (TD-03, TD-04).
+3. Keep-warm ping not yet configured at cron-job.org.
+4. Seeded demo accounts declared in the submission file **do not exist yet** — the seed
+   script creates them at step D.
+
+### Next actions, in order
+
+1. B09 — the outbox worker. Drains the outbox, runs clustering and confidence, writes
+   incidents. This is where the pure modules finally connect to the running system.
+2. D — rich seed data and demo accounts, at which point the application starts looking
+   like a system rather than a prototype
+3. B08 and the officer workflow — lifecycle state machine, dispatch, assignment
+
+---
+
 ## 13 August 2026 — Session 7: B05 clustering, and the application is live
 
 ### What happened

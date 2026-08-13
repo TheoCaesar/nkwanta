@@ -51,6 +51,7 @@ section, then [`CLAUDE.md`](CLAUDE.md).
 | [`docs/explainers/01-authentication.md`](docs/explainers/01-authentication.md) | Roles, tokens, why there is no driver role, why registration cannot escalate |
 | [`docs/explainers/02-report-intake-and-the-outbox.md`](docs/explainers/02-report-intake-and-the-outbox.md) | The transactional outbox, idempotency, the longitude/latitude trap |
 | [`docs/explainers/03-clustering-and-order-independence.md`](docs/explainers/03-clustering-and-order-independence.md) | Connected components, why incremental assignment fails, float associativity |
+| [`docs/explainers/04-confidence-and-decay.md`](docs/explainers/04-confidence-and-decay.md) | Noisy-OR, why not to sum weights, and the independence assumption that is false |
 
 Each ends with a thirty-second summary written to be said out loud. Rule 10 of the exam
 paper permits an oral examination on authorship and understanding — see *viva voce* in
@@ -136,7 +137,8 @@ see D-012.
 
 ## Status
 
-**Deployed and running. 111 tests passing, 21 of them property-based.**
+**Live at [nkwanta.onrender.com](https://nkwanta.onrender.com/). 143 tests passing, 53 of
+them property-based.**
 
 | Step | State |
 |---|---|
@@ -145,8 +147,9 @@ see D-012.
 | B03 authentication, four roles | done |
 | B04 report intake with the transactional outbox | done |
 | B05 spatio-temporal clustering | done |
-| B06 confidence with time decay | next |
-| B09 outbox worker | after that |
+| B06 confidence with time decay | done |
+| B09 outbox worker | next |
+| D rich seed data and demo accounts | after that |
 
 The estimate that shaped all of this: Use Case Points puts full scope at **1,948
 person-hours**, roughly forty times the original examination window. The deliverable is

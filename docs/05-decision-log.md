@@ -9,6 +9,43 @@ Format: what was decided, what else was considered, why, and what it costs.
 
 ---
 
+## 13 August 2026 — B06 confidence
+
+### D-023 — Confidence combines evidence with noisy-OR, not a sum
+
+**Decided:** An incident's confidence is `1 − ∏(1 − wᵢ)`, where each report's weight is
+`reputation × decay(age) × evidence_strength`. Evidence strength is capped at 0.45 so no
+single report can ever reach the escalation threshold alone.
+
+**Considered:** summing weights and clamping to 1; taking the maximum weight; a simple
+count of corroborating reports.
+
+**Why:** Summing is wrong twice — it exceeds 1, and it treats the hundredth report as
+worth as much as the second, when in reality the first independent confirmation changes
+your mind and the fiftieth changes nothing. Clamping would paper over the first problem
+and a model that needs clamping to stay legal has stopped meaning anything. Taking the
+maximum discards corroboration entirely, which is the one thing the system exists to
+measure. A plain count ignores reporter reliability, so a discredited account would count
+the same as a proven one.
+
+Noisy-OR has a probabilistic reading — the chance at least one reporter is right — and
+yields bounded, monotonic and saturating behaviour with no clamping. Because
+multiplication is commutative it is also order-independent, matching the guarantee made
+by clustering.
+
+The 0.45 cap is what forces corroboration: with it, even a perfectly trusted reporter
+alone scores 0.427 against a 0.70 threshold, so summoning police always takes more than
+one person.
+
+**Costs.** Noisy-OR assumes independence and reports are not independent — six people in
+one jam are one event seen six times. Confidence is therefore systematically overstated
+for crowds, and the bias runs towards over-confidence, which is the more dangerous
+direction. Recorded as **TD-15** with the direction of the error stated and two proposed
+mitigations. Every constant is a guess fitted to no data (**TD-04**), which is why they
+are environment variables rather than literals.
+
+---
+
 ## 13 August 2026 — B05 clustering
 
 ### D-022 — Test data is generated around hotspots, not uniformly

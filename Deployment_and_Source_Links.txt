@@ -3,7 +3,7 @@ CSCD602 ADVANCED SOFTWARE ENGINEERING — INDIVIDUAL PROJECT EXAMINATION
 Deployment and Source Links
 ================================================================================
 
-Student Name:      [TO BE FILLED IN]
+Student Name:      Theophilus Caesar
 Student ID:        22424543
 Project Title:     Nkwanta: A Road Incident Reporting and Dispatch System
                    for Urban Ghana
@@ -23,14 +23,18 @@ page seems slow to load, please allow it one minute before concluding it is down
 LIVE APPLICATION
 --------------------------------------------------------------------------------
 
-Live Application:  [TO BE FILLED IN — https://<service>.onrender.com]
+Live Application:  https://nkwanta.onrender.com/
 
-Interactive API:   [same URL]/docs
+                   This is the application itself — the incident map, the
+                   report form and the dispatch queue. There is no separate
+                   front-end host: the page is served directly by the API.
+
+Interactive API:   https://nkwanta.onrender.com/docs
                    Full API documentation, generated from the code. Every
                    endpoint can be called directly from this page. Use the
                    "Authorize" button with a token from POST /auth/login.
 
-Service status:    [same URL]/ready
+Service status:    https://nkwanta.onrender.com/ready
                    Confirms the database is reachable and PostGIS is installed.
 
 Admin URL:         There is no separate admin site. Administrative actions are
@@ -83,7 +87,7 @@ admin calling POST /auth/users.
 SOURCE CODE
 --------------------------------------------------------------------------------
 
-Source Code Repository:  [TO BE FILLED IN — https://github.com/<user>/nkwanta]
+Source Code Repository:  https://github.com/TheoCaesar/nkwanta
 
 The commit history is deliberately structured. Each commit corresponds to a
 build task from the effort estimate (B01 scaffold, B02 data model, B03 auth,
@@ -94,21 +98,27 @@ collapsed into a single upload.
 SUGGESTED FIVE-MINUTE WALKTHROUGH
 --------------------------------------------------------------------------------
 
-1. Open the live URL. The map shows current incidents, coloured by confidence.
+1. Open https://nkwanta.onrender.com/
+   The map shows current incidents, coloured by confidence. Allow up to 60
+   seconds on the first load if the instance has been idle.
 
-2. Open /docs and log in as commuter@nkwanta.demo via POST /auth/login.
-   Copy the access_token, click "Authorize", paste it in.
+2. Open https://nkwanta.onrender.com/docs
+   Log in as commuter@nkwanta.demo via POST /auth/login. Copy the
+   access_token from the response, click "Authorize" at the top right, and
+   paste it in.
 
 3. POST /reports with latitude 5.6037 and longitude -0.1870 (Kwame Nkrumah
    Circle) and incident_type "accident". Watch it appear on the map.
 
-4. Try the same report with the coordinates swapped. It is rejected with a
-   message naming the likely cause — PostGIS orders points as
-   (longitude, latitude), which is the reverse of how people speak, and a
-   swap silently moves Accra 600 km out to sea.
+4. Try the same report with the coordinates swapped — latitude -0.1870 and
+   longitude 5.6037. It is rejected with a message naming the likely cause.
+   PostGIS orders points as (longitude, latitude), the reverse of how people
+   speak, and a swap silently moves Accra 600 km out into the Gulf of Guinea
+   without raising anything. See docs/explainers/02.
 
 5. Log in as officer@nkwanta.demo to see the dispatch queue: incidents ranked
-   by confidence, with the contributing reports and the weight each one carried.
+   by confidence, with the contributing reports and the weight each one
+   carried, so the score can be explained rather than merely displayed.
 
 --------------------------------------------------------------------------------
 WHERE TO FIND THINGS IN THE SUBMISSION
