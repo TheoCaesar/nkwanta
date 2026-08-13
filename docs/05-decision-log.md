@@ -9,6 +9,39 @@ Format: what was decided, what else was considered, why, and what it costs.
 
 ---
 
+## 12 August 2026 — B01 build issues
+
+### D-015 — Dependencies pinned to the first versions with CPython 3.14 wheels
+
+**Decided:** Move every pin forward to a version publishing a prebuilt wheel for CPython
+3.14: `asyncpg` 0.30.0 → 0.31.0, `SQLAlchemy` 2.0.43 → 2.0.52, `pydantic` 2.11.7 → 2.13.4
+(which pins `pydantic-core` 2.46.4), plus `fastapi`, `uvicorn`, `alembic`, `GeoAlchemy2`,
+`pytest` and `hypothesis` brought to current.
+
+**Considered:** installing Python 3.12 alongside 3.14 and building against that; asking
+for the MSVC C++ build tools and a Rust toolchain to be installed.
+
+**Why:** The development machine runs Python 3.14. Neither `asyncpg` 0.30.0 nor
+`pydantic-core` 2.33.2 publishes a 3.14 wheel, so pip fell back to compiling both from
+source — `asyncpg` failed on the missing MSVC C++ compiler, `pydantic-core` failed at the
+Rust link step. Both alternatives cost more time than moving the pins, and installing a
+compiler toolchain to build packages that ship perfectly good wheels one version later is
+work for its own sake.
+
+Availability was checked against the PyPI API rather than guessed, for every package with
+a compiled extension.
+
+**Costs.** Larger version jumps than intended mid-build — `fastapi` 0.116 → 0.141 and
+`pytest` 8 → 9 are both major moves. Mitigated by re-running the full suite immediately
+afterwards: 22 tests, all passing. `bcrypt` 5.0.0 needed no change because it ships a
+`cp39-abi3` wheel — the stable ABI, which works on every later interpreter.
+
+**Note for the debt register.** This is exactly the failure mode TD-10 describes: pins
+were verified once, by hand, on one machine. A second machine with a different interpreter
+found the gap immediately. Recorded there rather than treated as a one-off.
+
+---
+
 ## 12 August 2026 — hosting, with 40 hours remaining
 
 ### D-014 — Render free-tier cold start accepted and disclosed

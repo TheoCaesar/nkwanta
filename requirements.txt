@@ -1,0 +1,36 @@
+# Nkwanta — runtime and development dependencies.
+# Pinned so that the deployed build matches the tested build exactly.
+#
+# Every pin below has a prebuilt wheel for CPython 3.14 on Windows, macOS and Linux.
+# That matters: packages with C or Rust extensions and no matching wheel are compiled
+# from source, which needs the MSVC C++ build tools and a Rust toolchain. Verified
+# against PyPI on 12 August 2026. See docs/05-decision-log.md D-015.
+
+# --- web ---------------------------------------------------------------------
+fastapi==0.141.1
+uvicorn[standard]==0.52.2
+
+# --- database ----------------------------------------------------------------
+SQLAlchemy==2.0.52          # 2.0.50+ is the first with cp314 wheels
+asyncpg==0.31.0             # 0.31.0 is the first with cp314 wheels
+greenlet==3.5.5             # required by SQLAlchemy's async support
+alembic==1.19.1
+GeoAlchemy2==0.20.0
+
+# --- configuration -----------------------------------------------------------
+pydantic==2.13.4            # pins pydantic-core 2.46.4, which has cp314 wheels
+pydantic-settings==2.15.0
+
+# --- auth --------------------------------------------------------------------
+# bcrypt is used directly rather than through passlib. passlib 1.7.4 reads
+# bcrypt.__about__.__version__, which bcrypt removed in 4.1, so the combination
+# raises AttributeError then ValueError on every hash. Verified 12 Aug 2026.
+# bcrypt 5.0.0 ships a cp39-abi3 wheel — the stable ABI, so it works on 3.14.
+PyJWT==2.13.0
+bcrypt==5.0.0
+
+# --- testing -----------------------------------------------------------------
+pytest==9.1.1
+pytest-asyncio==1.4.0
+hypothesis==6.165.5
+httpx==0.28.1

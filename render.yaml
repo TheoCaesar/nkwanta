@@ -1,0 +1,26 @@
+# Render blueprint.
+#
+# One service only. Render's free tier permits a single service, which is why the
+# outbox worker runs in-process as an asyncio task rather than as a separate worker
+# — see decision D-013.
+#
+# To use: push this repository to GitHub, then in Render choose
+# "New +" -> "Blueprint" and point it at the repo.
+
+services:
+  - type: web
+    name: nkwanta
+    runtime: python
+    plan: free
+    region: frankfurt          # closest available region to Ghana
+    branch: main
+    buildCommand: "pip install -r requirements.txt && alembic upgrade head"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.6"
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        sync: false            # set by hand in the Render dashboard — never committed
