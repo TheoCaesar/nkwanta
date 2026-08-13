@@ -56,6 +56,7 @@ section, then [`CLAUDE.md`](CLAUDE.md).
 | [`docs/explainers/06-lifecycle-and-reputation.md`](docs/explainers/06-lifecycle-and-reputation.md) | Rules as data, computed vs decided states, why reputation uses a Beta prior |
 | [`docs/explainers/07-voice-notes-and-evidence.md`](docs/explainers/07-voice-notes-and-evidence.md) | The answer to NFR-3, safe binary serving, and a real bug property testing found |
 | [`docs/explainers/08-corridors-and-commuter-advisory.md`](docs/explainers/08-corridors-and-commuter-advisory.md) | Lines not points, two thresholds on purpose, and why a row id cannot identify an event |
+| [`docs/explainers/09-circuit-breaker-and-clearance.md`](docs/explainers/09-circuit-breaker-and-clearance.md) | Three states, why the clock is a parameter, and a decay that was applied to nothing |
 
 Each ends with a thirty-second summary written to be said out loud. Rule 10 of the exam
 paper permits an oral examination on authorship and understanding — see *viva voce* in
@@ -157,8 +158,8 @@ them property-based.**
 | B08 lifecycle, dispatch, reputation loop | done |
 | F voice notes, photos, evidence bonus | done |
 | B corridor subscriptions and advisory | done |
-| C circuit breaker | next |
-| B22 the web page | after that |
+| C circuit breaker, clearance notifications | done |
+| B22 the web page | next — the last build item |
 
 The estimate that shaped all of this: Use Case Points puts full scope at **1,948
 person-hours**, roughly forty times the original examination window. The deliverable is

@@ -9,6 +9,120 @@ what comes next.
 
 ---
 
+## 13 August 2026 — Session 15: clearance notifications and the circuit breaker
+
+### What happened
+
+Two features, and building the first exposed a defect that had been present since B06.
+
+**Clearance notifications.** A system that reports blockages and never reports clearances
+trains people to ignore it. Three reasons a road stops being a problem, each worded
+differently: `resolved` (someone attended, it is clear), `false_alarm` (someone attended
+and found nothing), `expired` (nobody ever confirmed it). Distinguishing the second from
+the first matters — "we fixed it" and "there was nothing there" are different facts, and a
+commuter judging whether to trust the *next* warning deserves to know which they got.
+
+**The audience is the audience of the original warning** (**D-033**), read from the
+notifications already sent rather than recomputed from corridors. An incident's centroid
+*moves* as reports accumulate, so recomputing at clearance time could reach a different set
+of people and leave some commuters permanently believing a road is shut. The set that was
+warned is a fact; the set that would match now is a recalculation.
+
+The clearance outbox row is written **in the same transaction as the resolution**, for the
+same reason intake writes its outbox row alongside the report.
+
+### The defect the advisory revealed
+
+**Stored confidence never decayed.**
+
+Confidence is calculated when reports arrive and written to the incident row. Decay is
+applied at the moment of calculation, and calculation only happens during a rebuild, which
+only happens when a new report lands nearby.
+
+So an incident reported once at 07:00 and never mentioned again kept its 07:00 confidence
+**forever** — sitting on the map at 0.22 at midnight, hours after it had decayed to nothing
+in principle.
+
+The decay in `confidence.py` was correct, fully property-tested, and **applied to nothing
+that was sitting still.** A unit-tested function can be right in isolation and unreached in
+practice. That is worth saying out loud, because 53 passing property tests did not catch
+it — only building a feature that depended on the behaviour did.
+
+Fixed with a periodic sweep in the worker (`app/services/staleness.py`): every five minutes
+it fades incidents whose newest report is more than eight half-lives old, writes the decayed
+value down, and emits a clearance. It only touches incidents in a **computed** state — a
+warden already at a junction must not be stood down because the reports that summoned them
+decayed. Remaining approximation quantified as **TD-22**.
+
+### The circuit breaker
+
+Five consecutive failures open it for thirty seconds; one test call is then allowed; a
+single failure from half-open re-opens immediately.
+
+The problem it solves is not correctness — every line behaves as written. When a provider
+is down, each attempt costs a thirty-second timeout, so fifty queued notifications become
+twenty-five minutes of the worker doing nothing but waiting. **Someone else's outage
+becomes ours.** The breaker turns a thirty-second wait into a microsecond refusal.
+
+Verified behaviour, walked through:
+
+```
+07:00:00  closed     start
+07:00:00  closed     failure 1, 2
+07:00:00  open       failure 3 -> tripped
+07:00:10  open       still refusing instantly
+07:00:30  half_open  will allow one test call
+07:00:31  open       test call failed -> open again
+07:01:02  half_open  another 30s
+07:01:02  closed     test call worked -> normal
+```
+
+**The clock is a parameter, not a call** (**D-035**). That is what makes a thirty-second
+timeout testable in microseconds. Every time-dependent module in the project now follows
+this — `confidence`, `clustering`, `staleness`, `circuit_breaker` — with the worker loop as
+the single place the impurity is confined.
+
+Notifications are **not lost** when the breaker is open: the rows are already in the
+database and users see them in the application. Delivery is the optional extra, which is
+exactly why giving up on it quickly is safe.
+
+**Demonstrable in about a minute** via `/admin/gateway/fail`, `/admin/drain`,
+`/admin/gateway`, `/admin/gateway/heal`.
+
+### Verified
+
+| Check | Result |
+|---|---|
+| Full suite | **309 passed, 8 skipped** |
+| 34 documented API paths | pass |
+| Breaker trips exactly at the threshold (property test) | pass |
+| A success resets the consecutive run | pass |
+| Half-open allows one call; one failure re-opens | pass |
+| Rejections counted separately from failures | pass |
+| Counters never disagree with calls attempted (property) | pass |
+| Clearance wording differs per reason, no internal identifiers | pass |
+| Clearance key derived, stable, distinct from the advisory key | pass |
+
+New debt: **TD-21** the deliberately-breakable gateway on the live deployment (critical
+before real use), **TD-22** stored confidence decays only when the sweep runs, with the
+error quantified at about 7% between sweeps.
+
+Explainer written: `09-circuit-breaker-and-clearance.md`.
+
+### Unresolved
+
+1. **Migrations not applied** — `alembic upgrade head`, then reseed with `--reset`.
+2. No quiet hours; everyone following a road hears, including someone heading elsewhere.
+3. Keep-warm ping still not configured.
+
+### Next actions, in order
+
+1. `alembic upgrade head`, `python -m scripts.seed_demo --reset`, `pytest`, commit, push
+2. **B22 — the web page.** The map, report form, dispatch queue and notifications. This is
+   the last build item; everything after it is documentation and packaging.
+
+---
+
 ## 13 August 2026 — Session 14: B corridors and the commuter advisory
 
 ### What happened

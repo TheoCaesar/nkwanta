@@ -9,6 +9,91 @@ Format: what was decided, what else was considered, why, and what it costs.
 
 ---
 
+## 13 August 2026 — C circuit breaker and clearance
+
+### D-035 — Every time-dependent module takes `now` as an argument
+
+**Decided:** `circuit_breaker`, `confidence`, `clustering` and `staleness` all receive the
+current time as a parameter. None of them calls `datetime.now()`.
+
+**Considered:** reading the clock where it is needed, which is shorter.
+
+**Why:** It is what makes time-dependent behaviour testable at all. A thirty-second
+cooling-off period is verified by passing a timestamp thirty seconds later, in
+microseconds. **A test suite that waits thirty seconds to check a thirty-second timeout is
+one nobody runs, and one nobody runs stops being true.**
+
+It also removes a whole class of flakiness. A test that reads the clock passes or fails
+depending on when it happens to execute.
+
+**Costs.** Slightly more verbose call sites, and one place — the worker loop — still has to
+read the clock, because something must. That boundary is where the impurity is confined,
+deliberately.
+
+---
+
+### D-034 — A circuit breaker guards the outbound gateway
+
+**Decided:** Five consecutive failures open the breaker for thirty seconds, after which a
+single test call is allowed. One failure from half-open re-opens immediately.
+
+**Considered:** simple retry with backoff and no breaker.
+
+**Why:** Retry alone does not solve the actual failure. When a provider is down, each
+attempt costs a thirty-second timeout, so fifty queued notifications become twenty-five
+minutes of the worker doing nothing but waiting — holding connections and starving
+everything else. **Someone else's outage becomes ours.** The breaker converts a
+thirty-second wait into a microsecond refusal.
+
+Consecutive rather than total failures, because scattered failures are a blip and a total
+counter would eventually trip on a healthy provider. One failure from half-open rather than
+another five, because the test call was the point and four more failures means four more
+thirty-second timeouts to learn what we already know.
+
+**Costs.** While open, notifications are not delivered — but they are **not lost**: the
+rows are already in the database and users see them in the application. Delivery is the
+optional extra, which is exactly why giving up on it quickly is safe.
+
+The demonstration gateway that can be told to fail is real debt (**TD-21**) and must not
+survive to production.
+
+---
+
+### D-033 — A clearance goes to the people who were warned, not to a recomputed audience
+
+**Decided:** When an incident is resolved or ages out, the clearance notification is sent
+to exactly the users who received the original advisory, read from the notifications
+already stored.
+
+**Considered:** recomputing corridor matches at clearance time, which needs no extra
+lookup.
+
+**Why:** Two reasons, and the second would have bitten.
+
+Consistency: nobody should be told a road has cleared when they were never told it was
+blocked.
+
+And an incident's centroid **moves** as reports accumulate — clustering recomputes it every
+rebuild. Recomputing the match at clearance time could therefore reach a different set of
+people, leaving some commuters permanently believing a road is shut. The set that was
+warned is a fact; the set that would match now is a recalculation, and they are not the
+same thing.
+
+The clearance outbox row is written in the same transaction as the resolution, for the same
+reason intake writes its outbox row alongside the report: a crash in between would leave
+commuters believing a road is blocked forever, which is worse than never having warned
+them.
+
+**Costs.** A clearance for an incident whose advisory was never delivered reaches nobody,
+which is correct. Three separate wordings to maintain — resolved, false alarm, expired —
+because "we fixed it" and "there was nothing there" are different facts and a commuter
+judging whether to trust the next warning deserves to know which.
+
+**Prompted by review:** the gap was noticed when the author asked why the system only ever
+reports blockages. A system that never reports clearances trains people to ignore it.
+
+---
+
 ## 13 August 2026 — B corridors and commuter advisory
 
 ### D-032 — Incidents carry a stable cluster key separate from their primary key
