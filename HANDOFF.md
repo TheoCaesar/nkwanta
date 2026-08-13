@@ -9,6 +9,89 @@ what comes next.
 
 ---
 
+## 12 August 2026 — Session 4: B01 complete, scaffold built and smoke-tested
+
+### What happened
+
+Built the full B01 scaffold and **verified it runs** rather than assuming it does.
+
+**Application skeleton**
+
+- `app/main.py` — thin entry point: routers, static mount, lifespan. Starts successfully
+  with **no database attached**, which matters because the first deploy goes out before
+  Neon is wired in, and a service that refuses to start cannot be diagnosed from its logs.
+- `app/config.py` — settings from environment. Contains `_normalise_db_url`, which fixes
+  the three things wrong with a copy-pasted Neon connection string: missing `+asyncpg`
+  driver, `sslmode` (which asyncpg rejects outright), and Heroku-style `postgres://`.
+  **This is the single most common reason a first deploy to Neon fails**, so it is solved
+  once and unit-tested.
+- `app/db.py` — async engine, lazily created, `pool_pre_ping` because Neon drops idle
+  connections.
+- `app/routers/health.py` — `/health` (liveness, never touches the database) and `/ready`
+  (checks database + PostGIS). Deliberately separate: the keep-warm ping hits `/health`
+  every 10 minutes and must not burn Neon compute-hours.
+- `app/security.py` — bcrypt + JWT.
+- `web/index.html` — status page that live-polls both endpoints.
+
+**Migrations.** Alembic wired for async, URL read from the environment so no credential is
+ever committed. Migration `0001` enables PostGIS.
+
+**Deployment.** `render.yaml` blueprint, one free service, `DATABASE_URL` marked
+`sync: false` so it is set by hand in the dashboard. `RUNBOOK.md` written as an executable
+checklist: accounts → local run → deploy → keep-warm ping, with a troubleshooting table.
+
+### Verified, not assumed
+
+Everything below was actually executed in a Linux sandbox:
+
+| Check | Result |
+|---|---|
+| All 14 pinned dependencies resolve and install | pass |
+| Application imports and boots | pass |
+| `GET /` , `/health`, `/ready`, `/docs`, `/openapi.json` | 200, correct payloads |
+| Boots and serves correctly with **no** `DATABASE_URL` | pass |
+| Alembic fails with a *helpful* message when `DATABASE_URL` is unset | pass |
+| **22 tests pass** (13 health + URL normalisation, 9 security) | pass |
+
+**One real bug caught before it could cost time.** `passlib[bcrypt]==1.7.4` is broken
+against `bcrypt` 5.0 — passlib reads `bcrypt.__about__.__version__`, an attribute removed
+in bcrypt 4.1, and every hash call raises. This would have surfaced at hour 3.7 during
+B03 with auth half-written. passlib removed; bcrypt now used directly in `app/security.py`,
+with passwords over 72 bytes **rejected rather than silently truncated** — a truncated
+password that still authenticates is a security bug, not a convenience.
+
+**Technical debt register opened at `docs/08-technical-debt.md`** — before the first
+shortcut, as required. Twelve items, each with Debt → Cause → Impact → Priority →
+Proposed Resolution, classified Acceptable / Scheduled / Critical, plus a repayment plan
+ordered by value per hour. Total identified debt ≈14 hours against a ≈22-hour build.
+
+### Where things stand
+
+**B01 is code-complete and tested. It has not been deployed** — that needs the accounts,
+which only you can create.
+
+Highest-consequence open item is **TD-03**: the clustering radius (300 m) and window
+(30 min) are reasoned guesses with no data behind them. They are the most consequential
+unvalidated assumption in the system and they are needed by hour 8.6.
+
+### Unresolved
+
+1. **Accounts not yet created** — GitHub, Neon, Render. This blocks deployment and
+   nothing else. `RUNBOOK.md` Part 1 walks through it in about 15 minutes.
+2. **Student ID and project title** still not recorded.
+3. **Clustering parameters** still provisional. Needed before B05 at hour 8.6.
+4. `JWT_SECRET` needs generating and setting in Render before B03.
+
+### Next actions, in order
+
+1. Work through `RUNBOOK.md` Parts 1–3 → **live URL with `/ready` reporting PostGIS**
+2. Set up the keep-warm ping (Part 4)
+3. B02 — data model: users, reports, incidents, outbox
+4. B03 — auth against the seeded users
+5. B04 — report intake, the single most important endpoint in the submission
+
+---
+
 ## 12 August 2026 — Session 3: Schedule fixed, hosting settled
 
 ### What happened

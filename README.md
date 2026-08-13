@@ -41,6 +41,8 @@ section, then [`CLAUDE.md`](CLAUDE.md).
 | [`docs/05-decision-log.md`](docs/05-decision-log.md) | Every significant choice, dated, with reasoning |
 | [`docs/06-effort-estimation.md`](docs/06-effort-estimation.md) | Use Case Points and bottom-up estimate, and the cuts they forced |
 | [`docs/07-build-schedule.md`](docs/07-build-schedule.md) | Hour-by-hour plan for the remaining clock, with cut triggers |
+| [`docs/08-technical-debt.md`](docs/08-technical-debt.md) | Live debt register — every shortcut, its cause and its repayment |
+| [`RUNBOOK.md`](RUNBOOK.md) | Run it locally, then deploy it. Written to be executed. |
 
 ---
 

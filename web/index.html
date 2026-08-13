@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nkwanta — road incident reporting</title>
+<style>
+  :root { --ink:#14211c; --muted:#5d6b64; --line:#dde3df; --accent:#0f6b4f; --bg:#f7f9f8; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+         color:var(--ink); background:var(--bg); }
+  header { background:var(--accent); color:#fff; padding:1.5rem 1.25rem; }
+  header h1 { margin:0; font-size:1.4rem; letter-spacing:-0.01em; }
+  header p  { margin:.35rem 0 0; opacity:.85; font-size:.9rem; }
+  main { max-width:52rem; margin:0 auto; padding:1.5rem 1.25rem 3rem; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:10px;
+          padding:1.1rem 1.25rem; margin-bottom:1rem; }
+  .card h2 { margin:0 0 .6rem; font-size:1rem; text-transform:uppercase;
+             letter-spacing:.06em; color:var(--muted); }
+  .status { display:flex; align-items:center; gap:.6rem; font-weight:600; }
+  .dot { width:.7rem; height:.7rem; border-radius:50%; background:#bbb; flex:none; }
+  .dot.ok { background:#1a9d63; } .dot.warn { background:#d9a406; } .dot.err { background:#c2453d; }
+  dl { display:grid; grid-template-columns:auto 1fr; gap:.3rem 1rem; margin:.75rem 0 0;
+       font-size:.9rem; }
+  dt { color:var(--muted); } dd { margin:0; font-variant-numeric:tabular-nums; }
+  code { background:#eef2f0; padding:.12rem .35rem; border-radius:4px; font-size:.85em; }
+  a { color:var(--accent); }
+  footer { color:var(--muted); font-size:.82rem; text-align:center; padding:0 1.25rem 2rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Nkwanta</h1>
+  <p>Road incident reporting and dispatch — Twi for <em>junction</em></p>
+</header>
+
+<main>
+  <div class="card">
+    <h2>Service status</h2>
+    <div class="status"><span class="dot" id="dot"></span><span id="state">checking…</span></div>
+    <dl id="detail"></dl>
+  </div>
+
+  <div class="card">
+    <h2>What this is</h2>
+    <p style="margin:0">
+      Road users report what is blocking traffic — accidents, floods, closures, failed
+      traffic lights, roadworks. The system works out which reports describe the same
+      real event, scores how believable it is, warns commuters heading that way, and
+      queues a job for the police or a traffic warden.
+    </p>
+    <p style="margin:.75rem 0 0">
+      Interactive API documentation: <a href="/docs">/docs</a>
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Build status</h2>
+    <p style="margin:0">
+      Skeleton deployed. The map, report form and dispatch queue arrive with
+      <code>B22</code>. Deploying early and empty is deliberate — it retires the
+      largest risk in the schedule first.
+    </p>
+  </div>
+</main>
+
+<footer>CSCD602 Advanced Software Engineering — University of Ghana</footer>
+
+<script>
+(async () => {
+  const dot = document.getElementById('dot');
+  const state = document.getElementById('state');
+  const detail = document.getElementById('detail');
+  const row = (k, v) => `<dt>${k}</dt><dd>${v}</dd>`;
+
+  try {
+    const [h, r] = await Promise.all([
+      fetch('/health').then(x => x.json()),
+      fetch('/ready').then(x => x.json())
+    ]);
+
+    const cls = r.status === 'ok' ? 'ok' : r.status === 'degraded' ? 'warn' : 'err';
+    dot.className = 'dot ' + cls;
+    state.textContent = r.status === 'ok'
+      ? 'Running — database connected'
+      : r.status === 'degraded'
+        ? 'Running — ' + (r.detail || 'database not ready')
+        : 'Error — ' + (r.detail || 'unknown');
+
+    detail.innerHTML =
+      row('Version', h.version) +
+      row('Environment', h.environment) +
+      row('Uptime', h.uptime_seconds + ' s') +
+      row('Database', r.database) +
+      row('PostGIS', r.postgis);
+  } catch (e) {
+    dot.className = 'dot err';
+    state.textContent = 'Cannot reach the API';
+    detail.innerHTML = row('Error', e.message);
+  }
+})();
+</script>
+</body>
+</html>
