@@ -21,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.db import dispose_engine
+from app.routers import auth as auth_router
 from app.routers import health
 
 logging.basicConfig(
@@ -38,6 +39,15 @@ async def lifespan(app: FastAPI):
     log.info("starting %s v%s (%s)", settings.app_name, settings.app_version, settings.environment)
     if not settings.database_configured:
         log.warning("DATABASE_URL is not set — running without a database")
+    if settings.jwt_secret_is_default:
+        if settings.environment == "production":
+            # Refuse rather than warn. A production service signing tokens with a
+            # secret published in the repository is not degraded, it is unauthenticated.
+            raise RuntimeError(
+                "JWT_SECRET is still the development default. Set a real one before "
+                "running in production: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+            )
+        log.warning("JWT_SECRET is the development default — fine locally, never in production")
     # The outbox worker is started here from B09 onward. It runs in-process rather
     # than as a separate service because Render's free tier permits only one. This
     # is a deliberate, recorded compromise — see decision D-013.
@@ -61,6 +71,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(health.router)
+    app.include_router(auth_router.router)
 
     # One static page, served by FastAPI. There is no separate front-end host —
     # see decision D-012.

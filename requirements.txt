@@ -18,7 +18,7 @@ alembic==1.19.1
 GeoAlchemy2==0.20.0
 
 # --- configuration -----------------------------------------------------------
-pydantic==2.13.4            # pins pydantic-core 2.46.4, which has cp314 wheels
+pydantic[email]==2.13.4     # pins pydantic-core 2.46.4, which has cp314 wheels
 pydantic-settings==2.15.0
 
 # --- auth --------------------------------------------------------------------

@@ -9,6 +9,93 @@ Format: what was decided, what else was considered, why, and what it costs.
 
 ---
 
+## 13 August 2026 — scope expansion, deadline extended by 8 hours
+
+### D-019 — Media stored in the database, not object storage
+
+**Decided:** Photos and voice notes are stored as binary columns in PostgreSQL, capped
+at 250 KB per image and 500 KB per audio clip, with client-side downscaling before
+upload.
+
+**Considered:** Cloudflare R2, Cloudinary, Supabase storage — all have usable free
+tiers.
+
+**Why:** Every one of them is a fourth account, a fourth set of credentials, and a
+fourth thing that can fail on deploy day. Neon's 0.5 GB holds roughly 2,000 capped
+attachments, which is far more than a demonstration needs. The trade buys simplicity at
+exactly the point in the schedule where a new integration failure would hurt most.
+
+**Costs.** This is the wrong answer at any real scale: database backups balloon, and
+binary in rows competes with the query workload for buffer cache. Recorded as debt with
+the real fix named — object storage with presigned URLs, so the API never proxies bytes
+at all.
+
+---
+
+### D-018 — Voice notes answer NFR-3 rather than decorating it
+
+**Decided:** Voice note reporting is in scope, and is the designated answer to NFR-3.
+
+**Why:** NFR-3 states the driver-facing view is passive and read-only, with no typing
+while driving. Until now that was a constraint with no corresponding feature — the SRS
+said what the system would not do without saying how a driver reports at all. Voice
+input closes that gap: hold, speak, release.
+
+This converts a likely viva concession into a designed answer. It also happens to suit
+the user base better than typing does, independent of safety.
+
+**Costs.** Audio storage, playback in the officer view, and a browser permission prompt.
+Shares roughly 70% of its pipeline with photo evidence, so the pair costs less than the
+sum of the parts.
+
+---
+
+### D-017 — Six enhancements accepted; the deliverable is no longer Tier 0
+
+**Decided:** Build, in order — rich seed data, the Tier 1 officer workflow and lifecycle
+state machine, voice notes, corridor subscriptions and commuter advisory, photo
+evidence, and the circuit breaker.
+
+**Considered:** holding the Tier 0 line agreed in D-009.
+
+**Why:** Two things changed. The submission deadline moved out by 8 hours, and the
+observed build rate is far above the bottom-up estimate's assumption — B01 and B02 were
+budgeted at roughly 6 hours and took well under one. The 27.8-hour ceiling in
+`06-effort-estimation.md` was calibrated against an assumption that no longer holds.
+
+**What is now the binding constraint.** Not hours — **viva defensibility**. Rule 10
+permits an oral examination on authorship and understanding, and code that cannot be
+explained is worth less than absent code. Accordingly a plain-language explainer is
+written for every module as it is built, in `docs/explainers/`. That is the throttle on
+scope now, and it is a better one than the clock.
+
+**Costs.** More surface to understand, more debt to track, and the estimation document
+now describes a plan that was deliberately exceeded. That last point is recorded rather
+than hidden: an estimate that was revised when its assumptions broke is a better
+artefact than one quietly rewritten to match the outcome.
+
+---
+
+### D-016 — Warden added as a fourth role; no "driver" role
+
+**Decided:** Roles are commuter, warden, officer, admin. There is no driver role.
+
+**Why (warden):** The Tier 1 workflow needs both ends of the dispatch loop. A
+control-room officer decides who goes; a field warden goes and confirms the road is
+clear. Collapsing them would have made "assign" meaningless.
+
+**Why (no driver):** A driver and a passenger have identical permissions — both report,
+both receive warnings. The difference is a client-side mode, not an account type. When
+the client detects motion it goes read-only and offers voice input (NFR-3). Making
+driving a role would imply the server can tell who is currently driving, which it cannot
+and should not.
+
+**Costs.** Migration 0003 swaps the role CHECK constraint. This is the payoff for
+D-005's choice of VARCHAR + CHECK over a native PostgreSQL enum: the change runs inside
+an ordinary transaction, where `ALTER TYPE ... ADD VALUE` historically could not.
+
+---
+
 ## 12 August 2026 — B01 build issues
 
 ### D-015 — Dependencies pinned to the first versions with CPython 3.14 wheels
