@@ -251,6 +251,17 @@ class Incident(Base):
     __tablename__ = "incidents"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=_uuid)
+
+    # A stable identity across rebuilds: the smallest contributing report id.
+    #
+    # The primary key is useless for this. Every rebuild deletes the incident row and
+    # writes a new one with a fresh id, so anything keyed on `id` — a notification, a
+    # bookmark, an audit record — would break silently on the next report.
+    #
+    # The cluster key survives because cluster membership is order-independent, so the
+    # minimum member id is a property of the reports rather than of when they arrived.
+    cluster_key: Mapped[uuid.UUID] = mapped_column(nullable=False)
+
     incident_type: Mapped[IncidentType] = mapped_column(
         _enum(IncidentType, "incident_type"), nullable=False
     )
@@ -307,6 +318,7 @@ class Incident(Base):
             "(resolution IS NULL) = (resolved_at IS NULL)",
             name="ck_incidents_resolution_requires_time",
         ),
+        Index("ix_incidents_cluster_key", "cluster_key"),
         Index("ix_incidents_type_status", "incident_type", "status"),
         Index("ix_incidents_last_reported", "last_reported_at"),
         Index("ix_incidents_centroid", "centroid", postgresql_using="gist"),
@@ -344,6 +356,117 @@ class IncidentReport(Base):
         UniqueConstraint("report_id", name="uq_incident_reports_report"),
         Index("ix_incident_reports_incident", "incident_id"),
     )
+
+
+# --- corridors and subscriptions ----------------------------------------------
+
+
+class Corridor(Base):
+    """A named route people travel — Spintex Road, Ring Road, the N1.
+
+    A **line**, not a point. "Is this incident on my route?" is a question about distance
+    from a line, and PostGIS answers it directly: `ST_DWithin(corridor, point, 250)` is
+    true when the incident is within 250 metres of any part of the road.
+
+    Modelling a corridor as a centre point with a radius would be wrong in an obvious
+    way — the Tema Motorway is 20 km long, and a circle covering it would cover half of
+    Accra.
+
+    Users choose from a curated list rather than drawing their own route. Drawing needs
+    a routing engine and full network data; picking from fifteen named roads covers most
+    journeys and can be built now. Recorded in the backlog.
+    """
+
+    __tablename__ = "corridors"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
+    description: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
+
+    path: Mapped[str] = mapped_column(
+        Geography(geometry_type="LINESTRING", srid=WGS84, spatial_index=False),
+        nullable=False,
+    )
+
+    is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_corridors_path", "path", postgresql_using="gist"),
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<Corridor {self.name}>"
+
+
+class CorridorSubscription(Base):
+    """Someone follows a road. The composite primary key makes following twice
+    impossible rather than merely discouraged."""
+
+    __tablename__ = "corridor_subscriptions"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    corridor_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("corridors.id", ondelete="CASCADE"), primary_key=True
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_corridor_subscriptions_corridor", "corridor_id"),
+    )
+
+
+class Notification(Base):
+    """A warning delivered to one person about one incident.
+
+    The unique constraint on (user_id, incident_key) is what makes at-least-once
+    delivery survivable. The worker may process the same advisory repeatedly — after a
+    crash, after a rebuild, after a retry — and the recipient is still warned exactly
+    once.
+
+    Note it keys on `incident_key`, not on the incident's id. Incident rows are deleted
+    and recreated on every rebuild, so their ids are useless as an identity. The cluster
+    key is the smallest contributing report id, which is stable precisely because
+    cluster membership is order-independent.
+    """
+
+    __tablename__ = "notifications"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=_uuid)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    incident_key: Mapped[uuid.UUID] = mapped_column(nullable=False)
+    corridor_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("corridors.id", ondelete="SET NULL"), nullable=True
+    )
+
+    incident_type: Mapped[IncidentType] = mapped_column(
+        _enum(IncidentType, "incident_type"), nullable=False
+    )
+    message: Mapped[str] = mapped_column(String(300), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    read_at: Mapped[Optional[dt.datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "incident_key", name="uq_notifications_once_per_incident"),
+        Index("ix_notifications_user_created", "user_id", "created_at"),
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<Notification {self.incident_type.value} -> {self.user_id}>"
 
 
 # --- attachments — recorded evidence ------------------------------------------

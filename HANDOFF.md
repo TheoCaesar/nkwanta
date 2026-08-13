@@ -9,6 +9,89 @@ what comes next.
 
 ---
 
+## 13 August 2026 — Session 14: B corridors and the commuter advisory
+
+### What happened
+
+**The commuter half of the product now exists.** Everything before this served the control
+room; this is what a member of the public gets back for reporting. It is also the first
+time the outbox delivers something a *user* can see.
+
+**Corridors are LINESTRINGs, not points.** "Is this incident on my route?" is a question
+about distance from a line, which `ST_DWithin` answers directly in metres against the GiST
+index. A corridor modelled as a centre point with a radius could not answer it — a circle
+covering the 20 km Tema Motorway would cover half of Accra.
+
+**Two thresholds, deliberately** (**D-030**). Commuters are warned at 0.35; police are
+called at 0.70. Not an inconsistency: sending a warden to nothing wastes someone needed at
+a real junction, while telling a commuter about something that turns out to be clear costs
+a glance at a map. Different costs of being wrong, different thresholds. Still above a
+single report, so nobody's unsupported word warns a whole corridor.
+
+**The fan-out is in the worker** (**D-031**). The projector writes *one* outbox row however
+many people follow the road. Doing the fan-out during submission would make it slow in
+proportion to a corridor's popularity — the system would be slowest exactly when an
+incident matters most.
+
+### The subtle one: identity
+
+`incidents.id` is **useless for remembering anything**. The projector deletes and recreates
+incident rows on every rebuild, so a notification keyed on the primary key would be
+orphaned by the very next nearby report, and the same commuter would be warned twice about
+the same jam.
+
+Added `incidents.cluster_key` — the smallest contributing report id (**D-032**). It
+survives rebuilds because cluster membership is order-independent, so the minimum member id
+is a property of *which reports belong together* rather than of when they arrived.
+
+The primary key identifies a row. The cluster key identifies the event. Only the second is
+stable, because rows here are derived data and the event is not.
+
+**Delivered once**, guaranteed by two unique constraints, both using `ON CONFLICT DO
+NOTHING` rather than catching `IntegrityError` — a raised violation aborts the surrounding
+transaction, which inside the worker would discard every notification queued behind it.
+No "has it already crossed the threshold?" bookkeeping exists anywhere; the idempotency key
+does that work, which is simpler and more reliable than tracking state that gets rebuilt
+from scratch anyway.
+
+**15 real Accra corridors seeded**, with subscriptions arranged so several commuters follow
+the roads where the two verified incidents sit — otherwise the feature would demonstrate an
+empty list.
+
+### Verified
+
+| Check | Result |
+|---|---|
+| Full suite | **282 passed, 8 skipped** |
+| Migration 0006 → 0007 SQL valid | pass |
+| 29 documented API paths | pass |
+| Advisory threshold below dispatch, above one report | pass |
+| Message contains no raw numbers or internal identifiers | pass |
+| Notifications key on cluster key, not incident id | pass |
+| LINESTRING WKT puts longitude first | pass |
+| Every seeded corridor point inside Ghana | pass |
+| Seeded subscriptions will actually produce notifications | pass |
+
+Explainer written: `08-corridors-and-commuter-advisory.md`.
+
+### Unresolved
+
+1. **Migration 0007 not applied** — `alembic upgrade head`, then reseed with `--reset` so
+   corridors and subscriptions exist.
+2. **Nothing tells a commuter when a road clears.** A system that reports blockages and
+   never reports clearances trains people to ignore it. Recorded in D-030 as a gap.
+3. No quiet hours, no direction of travel — everyone following a road hears, including
+   someone 15 km away going the other way.
+4. Keep-warm ping still not configured.
+
+### Next actions, in order
+
+1. `alembic upgrade head`, `python -m scripts.seed_demo --reset`, `pytest`, commit, push
+2. C — circuit breaker
+3. B22 — the web page: map, report form, dispatch queue, notifications
+
+---
+
 ## 13 August 2026 — Session 13: consent for recordings, superseding D-028
 
 ### What happened

@@ -55,6 +55,7 @@ section, then [`CLAUDE.md`](CLAUDE.md).
 | [`docs/explainers/05-the-outbox-worker-and-projection.md`](docs/explainers/05-the-outbox-worker-and-projection.md) | Draining the outbox, why rebuild beats update, preserving human decisions |
 | [`docs/explainers/06-lifecycle-and-reputation.md`](docs/explainers/06-lifecycle-and-reputation.md) | Rules as data, computed vs decided states, why reputation uses a Beta prior |
 | [`docs/explainers/07-voice-notes-and-evidence.md`](docs/explainers/07-voice-notes-and-evidence.md) | The answer to NFR-3, safe binary serving, and a real bug property testing found |
+| [`docs/explainers/08-corridors-and-commuter-advisory.md`](docs/explainers/08-corridors-and-commuter-advisory.md) | Lines not points, two thresholds on purpose, and why a row id cannot identify an event |
 
 Each ends with a thirty-second summary written to be said out loud. Rule 10 of the exam
 paper permits an oral examination on authorship and understanding — see *viva voce* in
@@ -155,8 +156,9 @@ them property-based.**
 | D rich seed data and demo accounts | done |
 | B08 lifecycle, dispatch, reputation loop | done |
 | F voice notes, photos, evidence bonus | done |
-| B corridor subscriptions and advisory | next |
-| C circuit breaker · B22 the web page | after that |
+| B corridor subscriptions and advisory | done |
+| C circuit breaker | next |
+| B22 the web page | after that |
 
 The estimate that shaped all of this: Use Case Points puts full scope at **1,948
 person-hours**, roughly forty times the original examination window. The deliverable is

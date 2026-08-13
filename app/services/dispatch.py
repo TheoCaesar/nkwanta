@@ -16,11 +16,21 @@ import datetime as dt
 import uuid
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import reputation as rep
 from app.lifecycle import Action, IllegalTransition, Resolution, next_status
-from app.models import Incident, IncidentReport, IncidentStatus, Report, User, UserRole
+from app.models import (
+    Incident,
+    IncidentReport,
+    IncidentStatus,
+    OutboxMessage,
+    Report,
+    User,
+    UserRole,
+)
+from app.services.advisory import EVENT_INCIDENT_CLEARED, ClearanceReason
 
 
 class DispatchError(Exception):
@@ -95,6 +105,32 @@ async def resolve(
     incident.resolved_at = now
     incident.resolution = resolution.value
     incident.resolution_note = note or None
+
+    # Tell the people who were warned that the road is clear — queued in the SAME
+    # transaction as the resolution itself, for the same reason report intake queues its
+    # outbox row alongside the report. A crash between "resolved" and "told everyone"
+    # would leave commuters permanently believing a road is still blocked, which is
+    # worse than never having warned them.
+    await session.execute(
+        pg_insert(OutboxMessage)
+        .values(
+            id=uuid.uuid4(),
+            aggregate_type="incident",
+            aggregate_id=incident.id,
+            event_type=EVENT_INCIDENT_CLEARED,
+            payload={
+                "incident_key": str(incident.cluster_key),
+                "incident_type": incident.incident_type.value,
+                "reason": (
+                    ClearanceReason.RESOLVED.value
+                    if resolution is Resolution.CONFIRMED
+                    else ClearanceReason.FALSE_ALARM.value
+                ),
+            },
+            idempotency_key=f"{EVENT_INCIDENT_CLEARED}:{incident.cluster_key}",
+        )
+        .on_conflict_do_nothing(constraint="uq_outbox_idempotency_key")
+    )
 
     # --- the reputation feedback loop -----------------------------------------
     reporters = (

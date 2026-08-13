@@ -184,6 +184,26 @@ class AttachmentResponse(BaseModel):
     is_public: bool
 
 
+class CorridorResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    description: str | None
+    following: bool
+
+
+class NotificationResponse(BaseModel):
+    """`incident_key` rather than an incident id, because incident rows are recreated on
+    every rebuild and their ids do not survive it."""
+
+    id: uuid.UUID
+    incident_key: uuid.UUID
+    incident_type: IncidentType
+    message: str
+    confidence: float
+    created_at: dt.datetime
+    read_at: dt.datetime | None
+
+
 class VisibilityRequest(BaseModel):
     """Consent is withdrawable. A choice that cannot be reversed is not a choice."""
 

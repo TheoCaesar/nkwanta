@@ -28,9 +28,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.geo import to_wkt_point
 from app.models import (
+    Corridor,
+    CorridorSubscription,
     Incident,
     IncidentReport,
     IncidentType,
+    Notification,
     OutboxMessage,
     Report,
     User,
@@ -191,11 +194,108 @@ SEED_REPORTS: list[SeedReport] = [
 ]
 
 
+# --- corridors ----------------------------------------------------------------
+# Real Accra roads as coarse polylines — a handful of points each, enough to follow the
+# road's shape. Approximate to a few hundred metres, which is the right precision for a
+# 250 m match radius and is stated rather than implied.
+
+SEED_CORRIDORS: dict[str, tuple[str, list[tuple[float, float]]]] = {
+    "Spintex Road": (
+        "Tetteh Quarshie to Baatsona and on towards Tema",
+        [(5.6180, -0.1720), (5.6250, -0.1300), (5.6280, -0.0930), (5.6300, -0.0600)],
+    ),
+    "Ring Road": (
+        "Circle through Danquah to Osu",
+        [(5.5709, -0.2074), (5.5680, -0.1950), (5.5620, -0.1850), (5.5570, -0.1820)],
+    ),
+    "N1 Motorway": (
+        "Tetteh Quarshie westward past Achimota to Mallam",
+        [(5.6180, -0.1720), (5.6180, -0.2280), (5.6070, -0.2470), (5.5750, -0.2900)],
+    ),
+    "Accra–Kasoa Road": (
+        "Mallam through Weija to the Kasoa toll booth",
+        [(5.5750, -0.2900), (5.5550, -0.3200), (5.5400, -0.3800), (5.5340, -0.4160)],
+    ),
+    "Achimota–Circle": (
+        "Achimota through Lapaz and Nkrumah interchange",
+        [(5.6180, -0.2280), (5.6070, -0.2470), (5.5900, -0.2250), (5.5709, -0.2074)],
+    ),
+    "Legon–Madina Road": (
+        "University of Ghana to Madina market",
+        [(5.6510, -0.1870), (5.6650, -0.1750), (5.6836, -0.1665)],
+    ),
+    "Liberation Road": (
+        "37 Military Hospital to Airport and Tetteh Quarshie",
+        [(5.5850, -0.1870), (5.6050, -0.1780), (5.6180, -0.1720)],
+    ),
+    "Winneba Road": (
+        "Kaneshie through Odorkor towards Mallam",
+        [(5.5620, -0.2350), (5.5700, -0.2600), (5.5750, -0.2900)],
+    ),
+    "Dansoman Highway": (
+        "Kaneshie to Dansoman and the Sakaman junction",
+        [(5.5620, -0.2350), (5.5520, -0.2500), (5.5450, -0.2650)],
+    ),
+    "Tema Motorway": (
+        "Tetteh Quarshie to Tema Community 1",
+        [(5.6180, -0.1720), (5.6400, -0.1000), (5.6600, -0.0500), (5.6690, -0.0170)],
+    ),
+    "Ashaiman Road": (
+        "Tema Community 1 to Ashaiman",
+        [(5.6690, -0.0170), (5.6800, -0.0250), (5.6900, -0.0330)],
+    ),
+    "Nungua–Teshie Road": (
+        "The coastal road from Nungua towards La",
+        [(5.6000, -0.0750), (5.5850, -0.1050), (5.5700, -0.1400)],
+    ),
+    "East Legon–Adjiringanor": (
+        "East Legon through Adjiringanor",
+        [(5.6360, -0.1560), (5.6450, -0.1400), (5.6500, -0.1250)],
+    ),
+    "Kwame Nkrumah Avenue": (
+        "Accra Central through Adabraka to Circle",
+        [(5.5480, -0.2100), (5.5620, -0.2100), (5.5709, -0.2074)],
+    ),
+    "Graphic Road": (
+        "Accra Central to Kaneshie",
+        [(5.5480, -0.2100), (5.5550, -0.2250), (5.5620, -0.2350)],
+    ),
+}
+
+# Which seeded commuters follow which roads, so the demonstration shows real
+# notifications rather than an empty list. Chosen to overlap the incident hotspots:
+# several people follow Ring Road and Achimota–Circle, where the two verified
+# incidents sit.
+SEED_SUBSCRIPTIONS: dict[str, list[str]] = {
+    "commuter": ["Ring Road", "Achimota–Circle", "Spintex Road"],
+    "kofi": ["Ring Road", "N1 Motorway"],
+    "adjoa": ["Achimota–Circle", "Graphic Road", "Kwame Nkrumah Avenue"],
+    "yaw": ["Spintex Road", "Tema Motorway"],
+    "efua": ["Ring Road", "Liberation Road"],
+    "kojo": ["Achimota–Circle", "Winneba Road"],
+    "abena": ["Legon–Madina Road", "N1 Motorway"],
+    "kwabena": ["Dansoman Highway", "Graphic Road"],
+    "akosua": ["Ring Road", "Liberation Road", "East Legon–Adjiringanor"],
+    "esi": ["Accra–Kasoa Road", "Winneba Road"],
+    "fiifi": ["Nungua–Teshie Road"],
+    "warden": ["Achimota–Circle"],
+    "officer": ["Ring Road"],
+}
+
+
+def _linestring(points: list[tuple[float, float]]) -> str:
+    """WKT LINESTRING, longitude first. Same trap as POINT — see app/geo.py."""
+    coords = ", ".join(f"{lon} {lat}" for lat, lon in points)
+    return f"LINESTRING({coords})"
+
+
 @dataclass(frozen=True)
 class SeedResult:
     users_created: int
     reports_created: int
     outbox_queued: int
+    corridors_created: int = 0
+    subscriptions_created: int = 0
 
 
 async def clear_demo_data(session: AsyncSession) -> None:
@@ -207,16 +307,29 @@ async def clear_demo_data(session: AsyncSession) -> None:
     user_ids = [_id("user", u.key) for u in SEED_USERS]
     report_ids = [_id("report", f"{r.place}:{r.reporter_key}:{r.minutes_ago}") for r in SEED_REPORTS]
 
+    corridor_ids = [_id("corridor", name) for name in SEED_CORRIDORS]
+
     incident_ids = set(
         await session.scalars(
             select(IncidentReport.incident_id).where(IncidentReport.report_id.in_(report_ids))
         )
     )
     if incident_ids:
+        # Advisory outbox rows are keyed on the incident, not the report, so they need
+        # removing separately or a reseed would find stale idempotency keys and skip
+        # every notification.
+        await session.execute(
+            delete(OutboxMessage).where(OutboxMessage.aggregate_id.in_(incident_ids))
+        )
         await session.execute(delete(Incident).where(Incident.id.in_(incident_ids)))
 
+    await session.execute(delete(Notification).where(Notification.user_id.in_(user_ids)))
     await session.execute(delete(OutboxMessage).where(OutboxMessage.aggregate_id.in_(report_ids)))
     await session.execute(delete(Report).where(Report.id.in_(report_ids)))
+    await session.execute(
+        delete(CorridorSubscription).where(CorridorSubscription.user_id.in_(user_ids))
+    )
+    await session.execute(delete(Corridor).where(Corridor.id.in_(corridor_ids)))
     await session.execute(delete(User).where(User.id.in_(user_ids)))
     await session.commit()
 
@@ -249,6 +362,41 @@ async def seed(session: AsyncSession, now: dt.datetime | None = None) -> SeedRes
             existing.role = seed_user.role
     await session.flush()
 
+    # --- corridors ------------------------------------------------------------
+    corridors_created = 0
+    for name, (description, points) in SEED_CORRIDORS.items():
+        corridor_id = _id("corridor", name)
+        if await session.get(Corridor, corridor_id) is None:
+            session.add(
+                Corridor(
+                    id=corridor_id,
+                    name=name,
+                    description=description,
+                    path=_linestring(points),
+                )
+            )
+            corridors_created += 1
+    await session.flush()
+
+    # --- who follows what -----------------------------------------------------
+    subscriptions_created = 0
+    for user_key, corridor_names in SEED_SUBSCRIPTIONS.items():
+        for name in corridor_names:
+            if name not in SEED_CORRIDORS:
+                continue
+            existing = await session.get(
+                CorridorSubscription, (_id("user", user_key), _id("corridor", name))
+            )
+            if existing is None:
+                session.add(
+                    CorridorSubscription(
+                        user_id=_id("user", user_key),
+                        corridor_id=_id("corridor", name),
+                    )
+                )
+                subscriptions_created += 1
+    await session.flush()
+
     # --- reports and their outbox rows ---------------------------------------
     reports_created = 0
     outbox_queued = 0
@@ -279,4 +427,10 @@ async def seed(session: AsyncSession, now: dt.datetime | None = None) -> SeedRes
         outbox_queued += 1
 
     await session.commit()
-    return SeedResult(users_created, reports_created, outbox_queued)
+    return SeedResult(
+        users_created,
+        reports_created,
+        outbox_queued,
+        corridors_created,
+        subscriptions_created,
+    )

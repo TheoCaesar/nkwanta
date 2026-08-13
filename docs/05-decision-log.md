@@ -9,6 +9,79 @@ Format: what was decided, what else was considered, why, and what it costs.
 
 ---
 
+## 13 August 2026 — B corridors and commuter advisory
+
+### D-032 — Incidents carry a stable cluster key separate from their primary key
+
+**Decided:** `incidents.cluster_key` holds the smallest contributing report id. Anything
+that needs to remember an incident across time — notifications, advisory idempotency keys
+— references that rather than `incidents.id`.
+
+**Considered:** keying on the primary key; making the projector update incidents in place
+so ids survive.
+
+**Why:** The projector deletes and recreates incident rows on every rebuild, because a new
+report can merge two previously separate incidents and an append-only algorithm could never
+discover that (D-020, explainer 05). Consequently `incidents.id` identifies *a row*, not
+*an event*, and a notification keyed on it would be orphaned by the very next nearby
+report — the same commuter warned twice about the same jam.
+
+The cluster key survives because cluster membership is order-independent, so the minimum
+member id is a property of which reports belong together rather than of when they arrived.
+Updating in place was rejected because it reintroduces exactly the order dependence D-020
+exists to eliminate.
+
+**Costs.** One more column, and a second identity concept to explain. Backfilled with
+`gen_random_uuid()` for existing rows, which is safe only because incidents are fully
+derived and every rebuild overwrites it.
+
+---
+
+### D-031 — Advisory fan-out happens in the worker, not the projector
+
+**Decided:** When an incident crosses the advisory threshold the projector writes **one**
+outbox row. The worker matches corridors and creates one notification per subscriber.
+
+**Considered:** looking up subscribers directly in the projector, which is fewer moving
+parts.
+
+**Why:** A busy corridor may have thousands of followers. Fanning out inside the request
+that accepted a report would make submission slow in proportion to a road's popularity —
+**the system would be slowest exactly when an incident matters most**. One small row keeps
+submission constant-time and moves the expensive work to where being slow is harmless.
+
+The same reasoning as the original outbox decision, applied one level further out.
+
+**Costs.** A second event type and handler, and a rebuilt incident may briefly exist before
+its advisory is processed. Bounded by the poll interval, two seconds.
+
+---
+
+### D-030 — Commuters are warned at 0.35; police are called at 0.70
+
+**Decided:** Advisory notifications fire at the corroborated threshold. Dispatch still
+requires verified.
+
+**Considered:** one threshold for both, which is simpler to explain.
+
+**Why:** The two decisions carry different costs of being wrong. Sending a warden to
+nothing wastes a person who was needed at a real junction; telling a commuter about
+something that turns out to be clear costs them a glance at a map. A single threshold
+either spams wardens or leaves commuters uninformed about things the system already
+half-believes.
+
+The advisory threshold still sits above a single report — one report from an average
+account scores about 0.225 — so no individual's unsupported word warns a whole corridor.
+
+**Costs.** Some advisories will be about incidents that never reach verification, which is
+the intended trade rather than a defect. Two thresholds to keep straight, both named
+constants rather than literals.
+
+**Not yet addressed:** nothing tells a commuter when a road *clears*. A system that reports
+blockages and never reports clearances trains people to ignore it. Recorded as a gap.
+
+---
+
 ## 13 August 2026 — F voice notes
 
 ### D-027 — Centroids use fsum and are clamped to their bounding box

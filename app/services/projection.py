@@ -45,12 +45,14 @@ from dataclasses import dataclass
 from geoalchemy2.functions import ST_DWithin
 from geoalchemy2.shape import to_shape
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clustering import Cluster, ReportPoint, cluster_reports
 from app.confidence import score, status_for
 from app.config import Settings
-from app.models import Incident, IncidentReport, IncidentStatus, Report, User
+from app.models import Incident, IncidentReport, IncidentStatus, OutboxMessage, Report, User
+from app.services.advisory import ADVISORY_THRESHOLD, EVENT_INCIDENT_ADVISORY
 from app.services.attachments import report_ids_with_evidence
 
 # Reports outside the clustering radius can still end up in the same incident, linked
@@ -247,6 +249,7 @@ async def rebuild_for_report(
         carried = preserved.get(cluster.key)
         incident = Incident(
             id=uuid.uuid4(),
+            cluster_key=cluster.key,
             incident_type=report_by_id[cluster.members[0].id].incident_type,
             centroid=f"POINT({cluster.centroid_longitude} {cluster.centroid_latitude})",
             first_reported_at=cluster.first_occurred_at,
@@ -273,6 +276,34 @@ async def rebuild_for_report(
                 )
             )
         written += 1
+
+        # Believable enough to be worth warning commuters about? Queue an advisory.
+        #
+        # Only ONE row is written, however many people follow the road. The fan-out is
+        # the worker's job — doing it here would make report submission slow in
+        # proportion to a corridor's popularity, so the system would be slowest exactly
+        # when an incident matters most.
+        #
+        # No "did it already cross the threshold?" check is needed. The idempotency key
+        # is derived from the stable cluster key, so a repeat is refused by the unique
+        # constraint. ON CONFLICT DO NOTHING keeps that from aborting the transaction.
+        if scored.confidence >= ADVISORY_THRESHOLD:
+            await session.execute(
+                pg_insert(OutboxMessage)
+                .values(
+                    id=uuid.uuid4(),
+                    aggregate_type="incident",
+                    aggregate_id=incident.id,
+                    event_type=EVENT_INCIDENT_ADVISORY,
+                    payload={
+                        "incident_key": str(cluster.key),
+                        "incident_type": incident.incident_type.value,
+                        "confidence": scored.confidence,
+                    },
+                    idempotency_key=f"{EVENT_INCIDENT_ADVISORY}:{cluster.key}",
+                )
+                .on_conflict_do_nothing(constraint="uq_outbox_idempotency_key")
+            )
 
     return RebuildOutcome(
         incidents_removed=len(affected_incident_ids),
