@@ -124,6 +124,7 @@ brief rather than from the brief itself, and both are worth stating explicitly.
 | NFR-2 | Must work on 3G and on low-end Android devices | The actual device profile of the user base |
 | NFR-3 | **The driver-facing view is passive and read-only.** No typing while in motion. Reporting is passenger-first or voice-first. | The system must not create the hazard it exists to reduce. A road safety application that encourages phone use while driving is self-defeating. |
 | NFR-4 | **The reported party is never identified to other users.** Escalation to authorities requires a reputation floor. Rate limits per user per hour. | The system lets users report other people to the police. Without controls that is a harassment and false-accusation vector. This will be asked about. |
+| NFR-4a | **A reporter's identity is theirs to disclose.** Voice recordings identify their speaker, so they are private by default and shared only if the reporter chooses — a choice they can withdraw. | Added after review. NFR-4 protects the *accused*; this protects the *accuser*, which is a separate concern that the original wording did not cover. The two were conflated once already — see D-029. |
 | NFR-5 | No claim, anywhere in the interface, that the app dispatches emergency services | Liability, and honesty about what the system actually does |
 | NFR-6 | Location data retained only as long as an incident is active; no persistent tracking of individuals | Privacy — the system knows where people are |
 | NFR-7 | Incident map loads in under 3 seconds on a 3G connection | Usability under real conditions |
@@ -140,7 +141,8 @@ Kept so nothing is lost, and so the Future Evolution section has real content.
 
 | Item | Priority | Notes |
 |---|---|---|
-| Ride-sharing for stranded commuters | High | The headline evolution item. Needs identity verification, payments, safety design. |
+| **Voice note transcription** | **Highest** | Not a convenience. It resolves a real tension the current design only manages: a recording identifies its speaker, so a reporter must currently choose between helping commuters and staying anonymous. Transcription publishes the text and restricts the audio, and nobody has to choose. Blocked on speech recognition for Twi and Ga, which the commercial providers serve poorly. See D-029. |
+| Ride-sharing for stranded commuters | High | The headline *feature* evolution item. Needs identity verification, payments, safety design. |
 | Turn-by-turn rerouting | High | Requires routing engine and network data |
 | Subscription transport services | Medium | Billing and scheduling subsystem |
 | Trotro fare authority and adjudication | Medium | Effectively a separate system — see the TroTroGo concept |

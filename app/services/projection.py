@@ -51,6 +51,7 @@ from app.clustering import Cluster, ReportPoint, cluster_reports
 from app.confidence import score, status_for
 from app.config import Settings
 from app.models import Incident, IncidentReport, IncidentStatus, Report, User
+from app.services.attachments import report_ids_with_evidence
 
 # Reports outside the clustering radius can still end up in the same incident, linked
 # through a chain of intermediate reports. Fetching a wider neighbourhood than the
@@ -223,6 +224,10 @@ async def rebuild_for_report(
         ).all()
     )
 
+    # One query for the whole neighbourhood rather than one per report. Reports carrying
+    # a voice note or photograph weigh slightly more — see confidence.EVIDENCE_BONUS.
+    with_evidence = await report_ids_with_evidence(session, list(report_by_id.keys()))
+
     written = 0
     for cluster in clusters:
         scored = score(
@@ -236,6 +241,7 @@ async def rebuild_for_report(
             ],
             now=now,
             half_life_minutes=settings.confidence_half_life_minutes,
+            with_recorded_evidence=with_evidence,
         )
 
         carried = preserved.get(cluster.key)

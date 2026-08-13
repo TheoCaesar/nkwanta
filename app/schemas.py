@@ -17,7 +17,7 @@ import uuid
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.lifecycle import Resolution
-from app.models import IncidentStatus, IncidentType, UserRole
+from app.models import AttachmentKind, IncidentStatus, IncidentType, UserRole
 
 
 # --- authentication -----------------------------------------------------------
@@ -165,6 +165,29 @@ class ReputationChange(BaseModel):
 class ResolveResponse(BaseModel):
     incident: IncidentResponse
     reputations_updated: list[ReputationChange]
+
+
+class AttachmentResponse(BaseModel):
+    """Metadata only. The bytes are fetched separately from `url`, and that route is
+    restricted — a voice note identifies its speaker."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    report_id: uuid.UUID
+    kind: AttachmentKind
+    content_type: str
+    byte_size: int
+    duration_seconds: float | None
+    created_at: dt.datetime
+    url: str
+    is_public: bool
+
+
+class VisibilityRequest(BaseModel):
+    """Consent is withdrawable. A choice that cannot be reversed is not a choice."""
+
+    is_public: bool
 
 
 class WardenResponse(BaseModel):

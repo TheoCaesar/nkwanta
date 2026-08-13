@@ -372,6 +372,27 @@ def test_centroid_of_nothing_is_an_error_not_a_guess() -> None:
         centroid([])
 
 
+def test_the_mean_of_identical_values_does_not_escape_them() -> None:
+    """A regression test for a bug Hypothesis found and no human would have.
+
+    Three copies of this longitude sum-then-divide to a value one unit in the last place
+    *below* the minimum input. Nothing overflows; the exact mean is simply not
+    representable, and the nearest representable value sits outside the range.
+
+    Physically it is femtometres. As an invariant it was false, and the centroid of a
+    cluster escaping its own members' bounding box is the sort of thing that quietly
+    violates a database constraint years later.
+    """
+    lon = -0.11988551688412255
+    points = [
+        ReportPoint(uuid.UUID(int=i), "accident", 5.5, lon, BASE_TIME) for i in range(3)
+    ]
+    lat_c, lon_c = centroid(points)
+
+    assert lon_c == lon
+    assert lat_c == 5.5
+
+
 def test_nineteen_reports_of_one_crash() -> None:
     """The scenario from the design documents, end to end."""
     rng = random.Random(20260813)

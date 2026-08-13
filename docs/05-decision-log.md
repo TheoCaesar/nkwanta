@@ -9,6 +9,135 @@ Format: what was decided, what else was considered, why, and what it costs.
 
 ---
 
+## 13 August 2026 — F voice notes
+
+### D-027 — Centroids use fsum and are clamped to their bounding box
+
+**Decided:** `clustering.centroid` computes the mean with `math.fsum` and clamps the
+result to the minimum and maximum of the values it averaged.
+
+**Considered:** leaving it; widening the property test to a tolerance.
+
+**Why:** A property test failed on three *identical* longitudes whose mean came out one
+unit in the last place below the minimum input. Nothing overflows — the exact mean is not
+representable in binary floating point, and the nearest representable value sits outside
+the input range.
+
+Physically femtometres, and meaningless. As an invariant it was false, and a centroid
+escaping its own members' bounding box is the sort of thing that violates a database
+constraint two years later, in a stack trace nobody can explain.
+
+Widening the assertion to a tolerance was rejected for the same reason it was rejected in
+D-020: the property being claimed is exact, and an approximate test claims something
+weaker than the documentation does.
+
+**Costs.** `fsum` is marginally slower than `sum`. Irrelevant at cluster sizes measured in
+tens.
+
+**Worth recording separately:** no example-based test would have found this. It needs
+several identical coordinates with an unlucky bit pattern, which nobody writes by hand.
+This is the concrete answer to "what did property-based testing actually buy you" — a real
+invariant violation in code that had been passing, reviewed and deployed for several
+sessions.
+
+---
+
+### D-026 — Recorded evidence raises a report's weight, but is capped
+
+**Decided:** A report carrying a voice note or photograph is weighted 1.25× in the
+confidence calculation, with the result capped at the existing single-report ceiling of
+0.45.
+
+**Considered:** treating attachments as presentation only, with no effect on confidence.
+
+**Why:** A recording is materially harder to fabricate from an armchair than a tapped
+coordinate — it demonstrates the reporter was somewhere with something to describe. That
+is genuine evidence and ignoring it would waste it.
+
+The cap is what keeps it honest. A weighted report still cannot reach the 0.70 escalation
+threshold alone, so corroboration remains the only route to verification. Without the cap,
+"attach any audio file" becomes a way of buying credibility. The bonus also *multiplies*
+reputation rather than replacing it, so a discredited account cannot restore its standing
+by attaching audio.
+
+**Costs.** One more constant fitted to no data (TD-04). One extra query per rebuild to
+find which reports carry evidence — batched across the whole neighbourhood, not per
+report. `score()` gained an optional parameter, chosen over a required one specifically so
+that all 53 existing confidence property tests were unaffected; a test asserts both paths
+agree when no evidence is present.
+
+---
+
+### D-029 — The reporter decides who hears their recording — supersedes D-028
+
+**Decided:** Attachments carry an `is_public` flag, set by the reporter at upload and
+changeable by them at any time. Default off. A shared recording plays for anyone,
+including signed-out visitors. An unshared one plays only for its owner and the control
+room, and is omitted entirely from listings rather than merely refused.
+
+**What was wrong with D-028.** Two things, and the first is an error of reasoning rather
+than of judgement.
+
+It **conflated two different privacy concerns**. NFR-4 protects the *reported party* —
+the person being accused. D-028 applied it to the *reporter*. Those are different, and
+the second does not follow from the first: a flood on Spintex Road accuses nobody, so
+there is no reported party to protect and the justification simply did not apply.
+
+It also **discarded most of the value of capturing voice**. "Tipper truck across two
+lanes, backed up to Odorna" tells a commuter far more than *accident, confidence 0.88*.
+Locking that away made the feature almost pointless for the people it was built for.
+
+**Why consent rather than a blanket rule either way.** The concern is real but *narrow*.
+It bites on accusatory reports — naming a trotro driver, reporting a violation — where a
+speaker may be recognised by the person they accused. It does not bite on flooding. No
+single rule fits both, and the reporter is the only person who knows which case they are
+in. So they are asked.
+
+Consent is **withdrawable**, and only the reporter may change it — not even an officer.
+Consent somebody else can give on your behalf is not consent, and consent that cannot be
+withdrawn is not a choice.
+
+**Costs.** One column, one migration, one more thing for a client to display. Existing
+attachments default to private, because they were uploaded with no opportunity to consent
+and retroactively publishing them would be exactly what this column exists to prevent.
+
+**What this does not solve.** A reporter who wants to help but does not want their voice
+public still has to choose between the two. The real resolution is **transcription** —
+publish the text, restrict the audio, and nobody has to choose. That has been moved from
+"nice to have" to the top of the evolution plan as a direct consequence.
+
+**Credit where due:** this was raised in review by the author, who asked why other users
+should be denied information that would help them judge an incident. The original
+reasoning did not survive the question.
+
+---
+
+### D-028 — Attachment playback is restricted; incidents remain public
+
+> **Superseded by D-029 on 13 August 2026.** The reasoning below conflated protecting a
+> reported party with protecting a reporter, and cost more transparency than it needed
+> to. Retained unedited, because a decision log that quietly deletes its mistakes is not
+> a record of anything.
+
+**Decided:** Incident data is public. Attachment bytes are readable only by the person who
+uploaded them and by the control room. An unauthorised request returns 404, not 403.
+
+**Considered:** making attachments as public as the incidents they belong to.
+
+**Why:** **A voice recording identifies its speaker.** It is closer to biometric data than
+to a text note. NFR-4 exists because a system where people report one another to the
+police is a harassment vector, and audio is exactly what would expose a reporter.
+
+404 rather than 403 because a 403 confirms the attachment exists, which is itself
+information about somebody else's report.
+
+**Costs.** A commuter cannot hear the evidence behind an incident they are looking at,
+which is a real loss of transparency. Accepted: the alternative exposes reporters, and
+between transparency and safety this system chooses safety — the same reasoning that put
+NFR-4 in the SRS in the first place.
+
+---
+
 ## 13 August 2026 — B08 lifecycle and reputation
 
 ### D-025 — Reputation is a Beta posterior, not a success ratio

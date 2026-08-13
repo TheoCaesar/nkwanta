@@ -129,6 +129,60 @@ materially wider radius than a collision.
 
 ---
 
+## TD-19 — Media is stored in the database rather than in object storage
+
+**Debt.** Voice notes and photographs are stored as binary columns in PostgreSQL, capped
+at 512 KB and 250 KB respectively.
+
+**Cause.** Object storage means a fourth hosting account, a fourth set of credentials and
+a fourth thing that can fail on deploy day, on a project whose largest sustained risk was
+deployment. Neon's 0.5 GB holds roughly a thousand capped attachments, far more than a
+demonstration needs. Recorded at the time as decision D-019.
+
+**Impact.**
+- Database backups grow with media rather than with data, and restore times with them.
+- Binary rows compete with the query workload for the buffer cache. *Partly mitigated*:
+  attachments live in their own table, which nothing scans, so audio nobody is playing
+  costs nothing. The mitigation would not exist had the bytes been columns on `reports`.
+- Every playback is proxied through the API, so serving media consumes application
+  capacity that should be answering requests.
+- The 0.5 GB free tier becomes a hard ceiling on total uploads.
+
+**Priority.** Low at demonstration scale, **high** with real users — this is the item
+that fails first under adoption.
+
+**Class.** S — scheduled.
+
+**Proposed resolution.** Cloudflare R2 or equivalent, with presigned URLs so the API
+never touches the bytes at all: it issues a URL, the client uploads directly, and
+playback goes straight from storage. The `attachments` table keeps its metadata rows and
+gains a key column in place of `data`, so the change is contained to one table and one
+service module.
+
+---
+
+## TD-20 — Client-declared audio duration is not verified
+
+**Debt.** `duration_seconds` on an attachment is whatever the client says it is. Nothing
+decodes the file to check.
+
+**Cause.** Verifying it means decoding audio server-side, which means `ffmpeg` or a
+codec library — a substantial dependency for a value that is displayed and never acted
+upon.
+
+**Impact.** An officer could be shown "0:12" for a clip that is actually thirty seconds.
+Mildly misleading, and no decision depends on it. The **size cap is the real limit**, and
+that is enforced in both the upload handler and a database constraint.
+
+**Priority.** Low.
+
+**Class.** A — acceptable, provided nothing ever starts making decisions from this field.
+
+**Proposed resolution.** Either decode and verify on upload, or stop storing it and read
+the duration in the browser at playback time, which is where it is actually needed.
+
+---
+
 ## TD-18 — One database serves both development and production
 
 **Debt.** The local development environment and the deployed service point at the same

@@ -39,6 +39,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -93,6 +94,18 @@ class IncidentType(str, enum.Enum):
     SIGNAL_OUTAGE = "signal_outage"
     ROADWORKS = "roadworks"
     SURFACE_DEFECT = "surface_defect"
+
+
+class AttachmentKind(str, enum.Enum):
+    """What a reporter attached.
+
+    Voice exists because of NFR-3. The system must not ask anyone to type while driving,
+    which left the requirement with no corresponding feature — the SRS said what the
+    system would not do without saying how a driver reports at all. Hold, speak, release.
+    """
+
+    VOICE = "voice"
+    PHOTO = "photo"
 
 
 class IncidentStatus(str, enum.Enum):
@@ -205,6 +218,9 @@ class Report(Base):
 
     reporter: Mapped["User"] = relationship(back_populates="reports")
     incidents: Mapped[list["IncidentReport"]] = relationship(back_populates="report")
+    attachments: Mapped[list["Attachment"]] = relationship(
+        back_populates="report", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (
         UniqueConstraint("idempotency_key", name="uq_reports_idempotency_key"),
@@ -328,6 +344,79 @@ class IncidentReport(Base):
         UniqueConstraint("report_id", name="uq_incident_reports_report"),
         Index("ix_incident_reports_incident", "incident_id"),
     )
+
+
+# --- attachments — recorded evidence ------------------------------------------
+
+
+class Attachment(Base):
+    """A voice note or photo attached to a report.
+
+    **A separate table, not a column on `reports`.** Two reasons, and the first is the
+    important one.
+
+    `reports` is the hottest table in the system — clustering scans it constantly. Binary
+    data stored in those rows competes with that workload for the database's buffer
+    cache, so a few hundred voice notes would slow down every clustering query even
+    though none of them ever reads the audio. Keeping the bytes in a table nothing scans
+    means they cost nothing until someone asks for them.
+
+    Second, a report may carry none, one, or several attachments, and modelling that as
+    nullable columns would mean adding a column per kind.
+
+    Storing binary in PostgreSQL at all is the wrong answer at scale — object storage
+    with presigned URLs is right — and that is recorded as debt TD-19 rather than
+    pretended otherwise. It is the right answer *here*, because it avoids a fourth
+    hosting account on a project whose largest remaining risk is deployment.
+    """
+
+    __tablename__ = "attachments"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=_uuid)
+    report_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("reports.id", ondelete="CASCADE"), nullable=False
+    )
+    kind: Mapped[AttachmentKind] = mapped_column(
+        _enum(AttachmentKind, "attachment_kind"), nullable=False
+    )
+    content_type: Mapped[str] = mapped_column(String(60), nullable=False)
+    byte_size: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Seconds, for audio. Reported by the client and therefore not trustworthy — it is
+    # shown to an officer, never used to make a decision. The size cap is the real limit.
+    duration_seconds: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+
+    # Consent, given by the reporter and withdrawable by them at any time.
+    #
+    # A voice recording identifies its speaker, and the reporter is the only person who
+    # knows whether that is a problem for them — reporting a flood accuses nobody,
+    # reporting a named driver very much does. Rather than impose one rule on both, ask.
+    #
+    # Default False. Consent is given, never assumed.
+    is_public: Mapped[bool] = mapped_column(nullable=False, default=False)
+
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    report: Mapped["Report"] = relationship(back_populates="attachments")
+
+    __table_args__ = (
+        CheckConstraint("byte_size > 0", name="ck_attachments_size_positive"),
+        # Enforced in the database as well as in the upload handler. A cap that lives
+        # only in application code is one a future endpoint can forget.
+        CheckConstraint("byte_size <= 524288", name="ck_attachments_size_limit"),
+        CheckConstraint(
+            "duration_seconds IS NULL OR duration_seconds > 0",
+            name="ck_attachments_duration_positive",
+        ),
+        Index("ix_attachments_report", "report_id"),
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<Attachment {self.kind.value} {self.byte_size}B>"
 
 
 # --- outbox — notifications still owed ----------------------------------------

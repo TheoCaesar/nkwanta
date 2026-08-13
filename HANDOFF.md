@@ -9,6 +9,178 @@ what comes next.
 
 ---
 
+## 13 August 2026 — Session 13: consent for recordings, superseding D-028
+
+### What happened
+
+**A design decision was challenged in review and did not survive.** The author asked why
+other users should be denied a recording that would help them judge an incident. The
+answer was that the original reasoning was wrong in two ways.
+
+**It conflated two different privacy concerns.** NFR-4 protects the *reported party* — the
+person being accused. D-028 applied it to the *reporter*. Those are different, and the
+second does not follow from the first: a flood on Spintex Road accuses nobody, so there
+was no reported party and the justification did not apply at all.
+
+**It discarded most of the value of capturing voice.** "Tipper truck across two lanes,
+backed up to Odorna" tells a commuter far more than *accident, confidence 0.88*.
+
+The concern is real but **narrow** — it bites on accusatory reports, where a speaker may
+be recognised by the person they accused, and not on flooding. No single rule fits both,
+and the reporter is the only person who knows which case they are in.
+
+**So they are asked.** `is_public` on each attachment, default off, set at upload and
+changeable at any time through `PATCH /attachments/{id}/visibility`. Only the reporter may
+change it — not even an officer, because consent somebody else can give on your behalf is
+not consent, and consent that cannot be withdrawn is not a choice. The control room can
+always play a recording regardless, since a warden being sent somewhere should hear why.
+
+The listing endpoint filters with the same rule that guards the bytes, so an unshared
+recording is **invisible rather than merely unplayable** — listing something and then
+refusing it announces that it exists.
+
+Recorded as **D-029**. D-028 is marked superseded and **kept unedited**: a decision log
+that quietly deletes its mistakes is not a record of anything.
+
+**Transcription was reclassified.** It had been a nice-to-have in the backlog. It is now
+the **top item in the evolution plan**, because it is the actual resolution to this
+tension rather than a feature — publish the text, restrict the audio, and no reporter has
+to choose between helping and staying anonymous. The current design only *manages* that
+trade-off.
+
+**NFR-4a added to the SRS.** NFR-4 covers the accused; NFR-4a covers the accuser. The two
+were conflated once, so they are now written down separately.
+
+### Verified
+
+| Check | Result |
+|---|---|
+| Full suite | **255 passed, 8 skipped** |
+| Sharing defaults to off | pass |
+| Shared recording plays for signed-out visitors | pass |
+| Unshared recording silent to other commuters and to anonymous callers | pass |
+| Owner can always play their own | pass |
+| Officer, warden and admin can play anything | pass |
+| Consent is per attachment, not per user | pass |
+| Migration 0005 → 0006 SQL valid, existing rows default private | pass |
+
+Existing attachments default to private on migration: they were uploaded with no
+opportunity to consent, and retroactively publishing them would be precisely what the
+column exists to prevent.
+
+### Unresolved
+
+1. **Migrations 0005 and 0006 not yet applied** — `alembic upgrade head` before pushing.
+2. Seed data contains no attachments, so neither the evidence bonus nor sharing is
+   visible in the demonstration.
+3. Keep-warm ping still not configured.
+
+### Next actions, in order
+
+1. `pip install -r requirements.txt`, `alembic upgrade head`, `pytest`, commit, push
+2. B — corridor subscriptions and commuter advisory
+3. C — circuit breaker
+4. B22 — the web page
+
+---
+
+## 13 August 2026 — Session 12: F voice notes, and a real bug found by property testing
+
+### What happened
+
+**F — voice notes.** NFR-3 said the driver-facing view must never ask anyone to type
+while driving. Until now that was **a constraint with no answer** — the SRS said what the
+system would not do without saying how a driver reports anything at all. Hold a button,
+speak, release. In a viva, "how does a driver report a hazard?" was a question to concede;
+now it is one to answer.
+
+Attachments live in **their own table**, not as columns on `reports`. That table is
+scanned constantly by clustering, and binary data in those rows would compete with the
+query workload for buffer cache — audio nobody is playing would slow down every
+clustering pass. In a table nothing scans, it costs nothing.
+
+**Two security decisions worth volunteering.** Uploads are served with
+`X-Content-Type-Options: nosniff` and `Content-Disposition: attachment`, because a file
+declared as audio whose bytes are HTML can otherwise be sniffed by a browser and executed
+on our origin — stored XSS. And **playback is restricted to the recorder and the control
+room**, because a voice recording identifies its speaker; it is closer to biometric data
+than to a text note, and NFR-4 exists to keep exactly that away from other users.
+Unauthorised requests return 404 rather than 403, since a 403 confirms the attachment
+exists. Recorded as **D-028**.
+
+**Evidence is tied to the advanced concept, not bolted beside it.** A report carrying a
+recording weighs 1.25× more (**D-026**) — a recording is much harder to fabricate from an
+armchair than a tapped coordinate. Capped, so it can never carry a report past the
+escalation threshold alone; corroboration remains the only route to verification. It
+multiplies reputation rather than replacing it, so a discredited account cannot buy back
+standing with audio.
+
+### The finding of the session
+
+**A clustering property test failed on code that had passed, been reviewed and been
+deployed for five sessions.**
+
+```
+assert min(lons) <= centroid_longitude <= max(lons)
+AssertionError: assert -0.11988551688412255 <= -0.11988551688412256
+```
+
+Three **identical** longitudes, whose mean came out one unit in the last place *below* the
+minimum input. Nothing overflowed — the exact mean is simply not representable in binary
+floating point, and the nearest representable value sits outside the range of its own
+inputs.
+
+Physically femtometres. As an invariant, false — and a cluster centroid escaping its own
+bounding box is exactly the sort of thing that violates a database constraint two years
+later in a stack trace nobody can explain.
+
+**No example-based test would have found it.** It needs several identical coordinates with
+an unlucky bit pattern, which nobody writes by hand.
+
+Fixed with `math.fsum` plus a clamp, so the invariant holds by construction rather than by
+luck (**D-027**). Verified at 1000 generated examples and pinned with a regression test
+using the exact failing value.
+
+**This is the concrete answer to "what did property-based testing actually buy you".**
+
+### Verified
+
+| Check | Result |
+|---|---|
+| Full suite | **245 passed, 8 skipped** |
+| Centroid property at 1000 examples | pass |
+| Order independence at 1000 examples | pass |
+| Content-type allow-list rejects html, js, svg, octet-stream | pass |
+| Browser codec parameters (`audio/webm;codecs=opus`) accepted | pass |
+| Size cap at the exact boundary | pass |
+| Evidence bonus cannot breach the single-report ceiling | pass |
+| Existing confidence tests unaffected by the new parameter | pass |
+
+New dependency: `python-multipart` — FastAPI raises at import without it when file
+uploads are declared.
+
+New debt: **TD-19** media in the database rather than object storage, the item that fails
+first under real adoption; **TD-20** client-declared audio duration is unverified, which
+is acceptable only while nothing makes decisions from it.
+
+Explainer written: `07-voice-notes-and-evidence.md`.
+
+### Unresolved
+
+1. **Migration 0005 not yet applied** — `alembic upgrade head` before pushing.
+2. No playback UI; the endpoint exists, the player arrives with the page at B22.
+3. Seed data contains no attachments, so the evidence bonus is not visible in the demo.
+4. Keep-warm ping still not configured.
+
+### Next actions, in order
+
+1. `pip install -r requirements.txt`, `alembic upgrade head`, `pytest`, commit, push
+2. B — corridor subscriptions and commuter advisory
+3. C — circuit breaker
+4. B22 — the web page, at which point the map, the form and the player become visible
+
+---
+
 ## 13 August 2026 — Session 11: B08 lifecycle, dispatch and the reputation loop
 
 ### What happened

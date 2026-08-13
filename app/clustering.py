@@ -62,6 +62,7 @@ This is single-linkage agglomerative clustering, computed by union-find.
 from __future__ import annotations
 
 import datetime as dt
+import math
 import uuid
 from dataclasses import dataclass
 from typing import Iterable, Sequence
@@ -189,25 +190,42 @@ class _DisjointSet:
 # --- centroid -----------------------------------------------------------------
 
 
+def _mean(values: list[float], lo: float, hi: float) -> float:
+    """A mean that is reproducible and provably inside the range it averages.
+
+    Two floating-point problems, both found by property tests rather than by reasoning.
+
+    **Addition is not associative.** `(0.1 + 0.2) + 0.3` differs from
+    `0.1 + (0.2 + 0.3)` in the last bit, so summing the same coordinates in a different
+    order can shift a centroid by about 1e-16 degrees. Physically that is femtometres and
+    meaningless; as a promise it is broken, because the order-independence property
+    asserts results are *identical*, not nearly identical. Weakening that assertion to a
+    tolerance would let arrival order matter a little, which is exactly what must not
+    happen. `math.fsum` computes the exactly-rounded sum, so order stops mattering at
+    all.
+
+    **A mean can land outside its own inputs.** Given three copies of
+    -0.11988551688412255, the sum-then-divide result is -0.11988551688412256 — one unit
+    in the last place *below* the minimum input. Nothing overflowed and nothing is
+    wrong with the arithmetic; the exact mean is simply not representable, and the
+    nearest representable value happens to sit outside the range.
+
+    Hypothesis found that one. No example-based test would have: it needs several
+    identical coordinates with an unlucky bit pattern, which nobody writes by hand. The
+    clamp makes the invariant hold exactly rather than almost always.
+    """
+    raw = math.fsum(values) / len(values)
+    return min(max(raw, lo), hi)
+
+
 def centroid(points: Sequence[ReportPoint]) -> tuple[float, float]:
     """Mean position of a cluster.
 
-    THE SUBTLE BIT. Floating-point addition is **not associative**:
+    Sorted by id before summing, so the arithmetic depends on the data rather than on
+    arrival order, and clamped to the members' bounding box so the result is guaranteed
+    to lie inside it. See `_mean` for why both are necessary.
 
-        (0.1 + 0.2) + 0.3  !=  0.1 + (0.2 + 0.3)
-
-    Both are 0.6 to any sane precision, but they differ in the last bit. So summing the
-    same coordinates in a different order can produce a centroid that differs by about
-    1e-16 degrees — a few nanometres on the ground, and utterly meaningless.
-
-    It is still a broken promise. The property test asserts results are *identical*, not
-    *nearly identical*, and it would catch this. Weakening the test to a tolerance would
-    have hidden a real class of bug behind an approximate assertion.
-
-    So we sort by id before summing. The addition order becomes a fact about the data
-    rather than about arrival sequence, and the result is bit-for-bit reproducible.
-
-    (Averaging raw degrees is wrong near the poles and across the date line. Ghana is
+    (Averaging raw degrees is wrong near the poles and across the date line. Ghana sits
     near the equator and nowhere near ±180°, so it is correct here. Recorded as a
     limitation rather than left as an assumption.)
     """
@@ -215,10 +233,12 @@ def centroid(points: Sequence[ReportPoint]) -> tuple[float, float]:
         raise ValueError("centroid of an empty cluster is undefined")
 
     ordered = sorted(points, key=lambda p: p.id)
-    n = len(ordered)
+    lats = [p.latitude for p in ordered]
+    lons = [p.longitude for p in ordered]
+
     return (
-        sum(p.latitude for p in ordered) / n,
-        sum(p.longitude for p in ordered) / n,
+        _mean(lats, min(lats), max(lats)),
+        _mean(lons, min(lons), max(lons)),
     )
 
 
