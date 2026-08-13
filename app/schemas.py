@@ -16,7 +16,7 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from app.models import UserRole
+from app.models import IncidentType, UserRole
 
 
 # --- authentication -----------------------------------------------------------
@@ -68,3 +68,51 @@ class UserCreateByAdmin(BaseModel):
 
 class ErrorResponse(BaseModel):
     detail: str
+
+
+# --- reports ------------------------------------------------------------------
+
+
+class ReportCreate(BaseModel):
+    incident_type: IncidentType
+    latitude: float = Field(ge=-90, le=90, description="Degrees north. Accra is about 5.6")
+    longitude: float = Field(ge=-180, le=180, description="Degrees east. Accra is about -0.2")
+    occurred_at: dt.datetime | None = Field(
+        default=None,
+        description="When it happened. Defaults to now. Must not be in the future.",
+    )
+    note: str | None = Field(default=None, max_length=500)
+    idempotency_key: str | None = Field(
+        default=None,
+        max_length=64,
+        description=(
+            "Optional. Supply a unique value per report and a retry on a bad "
+            "connection cannot create a duplicate."
+        ),
+    )
+
+
+class ReportResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    incident_type: IncidentType
+    latitude: float
+    longitude: float
+    occurred_at: dt.datetime
+    received_at: dt.datetime
+    note: str | None
+    reporter_id: uuid.UUID
+
+
+class ReportAccepted(BaseModel):
+    """Returned by POST /reports.
+
+    `duplicate` tells the client whether this call created something. A retry that
+    lands on an existing idempotency key gets the original report back and
+    `duplicate: true`, rather than an error — the caller's intent was satisfied, and
+    a 409 would push them towards retrying again.
+    """
+
+    report: ReportResponse
+    duplicate: bool

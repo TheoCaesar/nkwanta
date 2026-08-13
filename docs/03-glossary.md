@@ -430,6 +430,40 @@ estimate to have visibly shaped what was built.
 
 ---
 
+### Viva voce (usually just "viva")
+
+**Plain English:** A spoken examination. The examiner sits with you, asks you to
+demonstrate the software, and questions you about it.
+
+Latin for "with the living voice" — meaning tested by talking rather than by writing.
+
+**Why it matters here:** Rule 10 of the examination paper says the examiner **may
+conduct an individual viva voce or demo to verify authorship, understanding and
+implementation**. Rule 11 lists what you can be asked about: requirements, effort
+estimation, architecture, implementation decisions, testing strategy and technical debt.
+
+Two consequences shaped this whole project:
+
+1. **Never include anything you cannot explain from first principles.** A clever feature
+   you cannot account for is worth less than a simple one you can — it invites exactly
+   the question you cannot answer.
+2. Every module has a plain-language explainer in `docs/explainers/`, each ending with a
+   thirty-second summary written to be said aloud.
+
+---
+
+### B01, B02, B03 … (build task identifiers)
+
+**Plain English:** Labels for individual pieces of work. "B" is for *build task*.
+
+They come from the bottom-up effort estimate in `06-effort-estimation.md` §4, and are
+reused in the schedule, in commit messages, in the debt register and in test file
+headers, so any one of those can be traced to the others.
+
+The numbers are not in time order — the schedule reorders them by value and risk.
+
+---
+
 ### Lehman's laws of software evolution
 
 **Plain English:** A set of observations that software in real use must keep changing or it

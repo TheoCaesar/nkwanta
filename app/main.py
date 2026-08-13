@@ -23,6 +23,7 @@ from app.config import get_settings
 from app.db import dispose_engine
 from app.routers import auth as auth_router
 from app.routers import health
+from app.routers import reports as reports_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -72,6 +73,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router)
     app.include_router(auth_router.router)
+    app.include_router(reports_router.router)
 
     # One static page, served by FastAPI. There is no separate front-end host —
     # see decision D-012.

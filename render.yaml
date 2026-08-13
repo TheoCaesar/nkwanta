@@ -20,7 +20,27 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.6"
+
       - key: ENVIRONMENT
         value: production
+
+      # Set by hand in the Render dashboard. `sync: false` means "this blueprint
+      # declares the variable but deliberately does not carry its value", so the
+      # connection string is never committed to the repository.
       - key: DATABASE_URL
-        sync: false            # set by hand in the Render dashboard — never committed
+        sync: false
+
+      # Render generates a strong random value on first deploy and keeps it stable
+      # afterwards. Better than a human-chosen secret, and one less manual step.
+      # app/main.py refuses to start in production if this is still the default.
+      - key: JWT_SECRET
+        generateValue: true
+
+      # Clustering parameters. Environment variables so they can be tuned without a
+      # redeploy — see technical debt TD-03, the highest-priority item on the register.
+      - key: CLUSTER_RADIUS_METRES
+        value: "300"
+      - key: CLUSTER_WINDOW_MINUTES
+        value: "30"
+      - key: CONFIDENCE_HALF_LIFE_MINUTES
+        value: "45"

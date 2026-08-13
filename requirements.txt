@@ -16,6 +16,7 @@ asyncpg==0.31.0             # 0.31.0 is the first with cp314 wheels
 greenlet==3.5.5             # required by SQLAlchemy's async support
 alembic==1.19.1
 GeoAlchemy2==0.20.0
+shapely==2.1.2              # GeoAlchemy2 needs it to convert geography back to numbers
 
 # --- configuration -----------------------------------------------------------
 pydantic[email]==2.13.4     # pins pydantic-core 2.46.4, which has cp314 wheels
