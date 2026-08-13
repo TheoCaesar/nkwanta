@@ -9,6 +9,93 @@ what comes next.
 
 ---
 
+## 13 August 2026 — Session 9: B09 outbox worker — the system is connected
+
+### What happened
+
+**The pure modules are no longer orphans.** Until now `clustering.py` and
+`confidence.py` were exercised only by tests; nothing in the running application called
+them. B09 closes that loop.
+
+`POST /reports` → outbox row (B04) → worker claims it → neighbourhood fetched with a
+live PostGIS query → clustering and confidence run → incident written → `GET /incidents`.
+
+**`app/services/projection.py`** — rebuilds incidents rather than updating them. That
+matters: a new report can **merge two previously separate incidents**, and an algorithm
+that only appends to an existing incident can never discover that. Rebuilding is also
+what keeps the replay property true.
+
+The neighbourhood fetch has two steps, and the second is easy to miss. Step 1 finds
+same-type reports near in space and time. Step 2 expands to *whole incidents* — without
+it, a rebuild can pull in half an incident and the other half silently vanishes, because
+its reports were never in the working set.
+
+**Human decisions survive rebuilds.** Assignment and resolution are captured before the
+delete and carried across, keyed by the cluster's smallest member id — stable because
+membership is order-independent. Confidence computes `reported`, `corroborated` and
+`verified`; `assigned` and `resolved` are human acts and arithmetic never overwrites them.
+
+**`app/worker.py`** — in-process asyncio drainer. `FOR UPDATE SKIP LOCKED` (a no-op with
+one worker, correct with several), one commit per batch so a crash replays the whole
+batch, failures recorded per row so one poison message cannot block everything behind it,
+and an exception can never kill the loop.
+
+**`app/routers/incidents.py`** — results are finally visible. Note the asymmetry:
+incidents are public, individual reports are not. `GET /incidents/{id}` returns the
+contributing reports and the weight each carried, which is what makes confidence
+explainable rather than merely displayed.
+
+### The testing gap, and how it was closed
+
+Everything so far ran against pure functions and stubs. That cannot catch what only a
+real database can: whether `ST_DWithin` measures metres or degrees, whether the geography
+column round-trips coordinates the right way round, whether cascades behave.
+
+PostGIS could not be installed in the build sandbox — `pgserver` ships only `plpgsql` and
+`vector`, and there is no root for apt. So `tests/test_integration_pipeline.py` was
+written to run against a real database and **skip automatically when `DATABASE_URL` is
+unset**. Two of its cases earn their keep alone: an 8 km separation must not merge (proves
+metres, not degrees), and coordinates must survive the round trip (a swap would put the
+centroid in the Gulf of Guinea with nothing else noticing).
+
+**These have not yet been run.** They need running locally against Neon — that is the
+next action, and the first real verification of the projection.
+
+### Verified
+
+| Check | Result |
+|---|---|
+| Full suite | **154 passed, 8 skipped** (integration, awaiting a database) |
+| Batch commits once, not per row | pass |
+| One failing row does not block its batch | pass |
+| Row abandoned after 5 attempts, left visible | pass |
+| Unknown event type skipped, not retried forever | pass |
+| Handler exception does not kill the loop | pass |
+| Already-processed row not handled twice | pass |
+
+New debt: **TD-16** — the rebuild neighbourhood bound (3× radius) is a chosen number, not
+a derived one. With chaining (TD-13) a long enough chain could link incidents outside each
+other's neighbourhood and a merge would be missed. Fix is to expand iteratively until no
+cluster touches the edge.
+
+Explainer written: `05-the-outbox-worker-and-projection.md`.
+
+### Unresolved
+
+1. **Integration tests not yet run against Neon.** This is the only real verification gap.
+2. Demo accounts still do not exist — step D.
+3. Clustering and confidence parameters remain guesses (TD-03, TD-04).
+4. Keep-warm ping not configured.
+
+### Next actions, in order
+
+1. `pytest tests/test_integration_pipeline.py -v` locally against Neon
+2. Commit, push, deploy — **this deploy changes what the app does**, unlike the last one
+3. D — seed data and demo accounts: ~20 Accra junctions, ~60 reports, real clustering
+4. B08 and the officer workflow — lifecycle state machine, dispatch, assignment
+
+---
+
 ## 13 August 2026 — Session 8: B06 confidence, submission file created
 
 ### What happened

@@ -20,10 +20,12 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
-from app.db import dispose_engine
+from app.db import dispose_engine, get_sessionmaker
 from app.routers import auth as auth_router
 from app.routers import health
+from app.routers import incidents as incidents_router
 from app.routers import reports as reports_router
+from app.worker import OutboxWorker, set_worker
 
 logging.basicConfig(
     level=logging.INFO,
@@ -49,11 +51,21 @@ async def lifespan(app: FastAPI):
                 "running in production: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
             )
         log.warning("JWT_SECRET is the development default — fine locally, never in production")
-    # The outbox worker is started here from B09 onward. It runs in-process rather
-    # than as a separate service because Render's free tier permits only one. This
-    # is a deliberate, recorded compromise — see decision D-013.
+    # The outbox worker runs in-process as an asyncio task rather than as a separate
+    # service, because Render's free tier permits only one. A deliberate compromise,
+    # recorded as decision D-013 and technical debt TD-01.
+    worker = None
+    if settings.database_configured:
+        worker = OutboxWorker(get_sessionmaker(), settings)
+        worker.start()
+        set_worker(worker)
+
     yield
+
     log.info("shutting down")
+    if worker is not None:
+        await worker.stop()
+        set_worker(None)
     await dispose_engine()
 
 
@@ -74,6 +86,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(auth_router.router)
     app.include_router(reports_router.router)
+    app.include_router(incidents_router.router)
 
     # One static page, served by FastAPI. There is no separate front-end host —
     # see decision D-012.

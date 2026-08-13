@@ -45,6 +45,7 @@ urgent than debt that merely sits there.
 | TD-13 | Single-linkage clustering chains along a corridor | A | Medium | B05 |
 | TD-14 | Clustering is O(n²) within each type bucket | S | Low | B05 |
 | TD-15 | Noisy-OR assumes independent reports; crowds overstate confidence | A | Medium | B06 |
+| TD-16 | Rebuild neighbourhood bound is a guess, could miss a distant merge | A | Low | B09 |
 
 Items added during B02 onward are appended in build order.
 
@@ -123,6 +124,34 @@ stretch of the Tema Motorway.
 (they are already read from environment variables, so this is a data change rather than a
 code change). Then tune against labelled real incidents once any exist. Flooding needs a
 materially wider radius than a collision.
+
+---
+
+## TD-16 — The rebuild neighbourhood is a heuristic, not a guarantee
+
+**Debt.** When a report arrives, the projector rebuilds incidents within three times the
+clustering radius and time window, then expands to whole incidents. Three is a chosen
+number, not a derived one.
+
+**Cause.** Rebuilding the entire map on every report would be correct and unusably slow.
+Some bound was needed and there is no data to derive one from.
+
+**Impact.** Single-linkage clustering chains (TD-13), so a sufficiently long chain of
+reports could in principle link two incidents that lie outside the neighbourhood of each
+other. The rebuild would then miss a merge that a full recomputation would have found.
+The result would be two adjacent incidents where there should be one — visible on the
+map, and not corrupting anything, but wrong.
+
+**Priority.** Low. It needs a chain of reports each within 300 m of the next, spanning
+more than 900 m, all within 90 minutes. Plausible on a congested corridor; not reachable
+with seeded data.
+
+**Class.** A — acceptable, with the failure mode understood and bounded.
+
+**Proposed resolution.** Expand the neighbourhood iteratively — fetch, cluster, and if
+any cluster touches the edge of the fetched region, widen and repeat until it does not.
+That converges and removes the guess entirely. It was not attempted under time pressure
+because it needs care to stay order-independent.
 
 ---
 
