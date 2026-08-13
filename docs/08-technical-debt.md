@@ -42,6 +42,8 @@ urgent than debt that merely sits there.
 | TD-10 | Dependency pinning verified once, no automated audit | S | Medium | B01 |
 | TD-11 | No CI pipeline — tests run only when remembered | S | Medium | B01 |
 | TD-12 | Single shared database, no read replica or partitioning | A | Low | Design |
+| TD-13 | Single-linkage clustering chains along a corridor | A | Medium | B05 |
+| TD-14 | Clustering is O(n²) within each type bucket | S | Low | B05 |
 
 Items added during B02 onward are appended in build order.
 
@@ -120,6 +122,62 @@ stretch of the Tema Motorway.
 (they are already read from environment variables, so this is a data change rather than a
 code change). Then tune against labelled real incidents once any exist. Flooding needs a
 materially wider radius than a collision.
+
+---
+
+## TD-13 — Single-linkage clustering chains
+
+**Debt.** Reports are grouped as connected components of a "near in space and time"
+graph. A line of reports each 250 m from the next merges into one incident even if the
+two ends are kilometres apart.
+
+**Cause.** Single linkage is inherent to the connected-components approach, and that
+approach was chosen because it is provably order-independent — the property the whole
+design exists to protect.
+
+**Impact.** On a long congested corridor, several genuinely separate incidents could
+merge into one enormous one. The map would show a single pin where a commuter needs
+three, and the confidence score would be meaningless because it would aggregate
+unrelated events.
+
+**Priority.** Medium. Not reachable with seeded data; likely on a real Accra corridor at
+rush hour, which is exactly when the system matters.
+
+**Class.** A — acceptable for now, with the trade explicitly understood.
+
+**Alternatives considered and rejected.** Complete linkage resists chaining but is far
+more expensive and fragments genuine incidents spanning a junction. DBSCAN handles
+chaining well but reintroduces parameters as unvalidated as the two already present
+(TD-03).
+
+**Proposed resolution.** A maximum-diameter cap applied as a post-pass. It must be a
+post-pass: enforcing a cap *during* merging would reintroduce order dependence and break
+the property the design is built on. The post-pass itself must be order-independent —
+splitting on a deterministic criterion such as the widest pair.
+
+---
+
+## TD-14 — Clustering is O(n²) within each type and time bucket
+
+**Debt.** Every pair of same-type reports is compared. With n reports that is n(n−1)/2
+distance calculations.
+
+**Cause.** Simple, obviously correct, and fast enough at demonstration scale. A spatial
+index would have been premature optimisation before any load existed.
+
+**Impact.** Fine at hundreds of reports, poor at tens of thousands. Recomputing over a
+full day of citywide reports would become noticeably slow.
+
+**Priority.** Low now. **Has an interest rate** — cost grows quadratically with adoption,
+so it worsens fastest exactly when the system succeeds.
+
+**Class.** S — scheduled.
+
+**Proposed resolution.** Two steps, neither of which changes the result. First, bucket by
+time window so only temporally-adjacent reports are compared. Second, use the PostGIS
+GiST index to fetch spatial candidates rather than testing every pair — the index already
+exists for this reason. The connected-components structure is unaffected, so the
+order-independence property survives untouched.
 
 ---
 

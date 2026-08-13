@@ -9,6 +9,104 @@ what comes next.
 
 ---
 
+## 13 August 2026 — Session 7: B05 clustering, and the application is live
+
+### What happened
+
+**Deployed to Render successfully.** The first attempt failed at startup with
+`RuntimeError: JWT_SECRET is still the development default` — which is the safeguard in
+`app/main.py` working exactly as intended. A production service signing tokens with a
+secret published in the repository is not degraded, it is unauthenticated, so it refuses
+to boot rather than accepting forgeable tokens.
+
+Root cause worth recording: `generateValue: true` in `render.yaml` only fires when Render
+*creates* a service from the blueprint. An existing service does not pick up newly added
+variables. Resolved by setting `JWT_SECRET` by hand in the dashboard. Added to the
+runbook troubleshooting table, along with the note that `No open ports detected` is a
+symptom — the app exited before binding — and the real error is always further up the log.
+
+All three migrations applied to Neon during the build. **The application is live.**
+
+**B05 — the clustering engine.** The module that makes this project advanced rather than
+merely large.
+
+Grouping is a **graph problem**: an edge between two reports of the same type that are
+close in both place and time, and incidents are the connected components of that graph,
+computed by union-find.
+
+The alternative — incremental assignment, where each arriving report joins the nearest
+existing incident — is order-dependent and therefore unusable. The counter-example is now
+a test: three reports in a line 200 m apart with a 300 m radius give one incident arriving
+A, B, C and two arriving A, C, B. Connected components give one either way, because a path
+exists through the middle report. Recorded as **D-020**.
+
+`app/clustering.py` is deliberately **pure** — no database, no clock, no randomness. That
+is what allows thousands of generated cases per second, which is what makes the
+order-independence property provable rather than merely asserted.
+
+### Two findings worth keeping
+
+**Floating-point addition is not associative.** `(0.1+0.2)+0.3` differs from
+`0.1+(0.2+0.3)` in the last bit. Summing centroid coordinates in different orders produced
+answers differing by about 1e-16 degrees — nanometres, physically meaningless, but a
+broken promise nonetheless. The property test asserts *identical*, not *nearly identical*,
+so it caught it. Fixed by sorting by report id before summing. Weakening the assertion to
+a tolerance would have let order matter a little and hidden a whole class of bug.
+
+**The property tests were passing vacuously, and it took measuring to notice.** The first
+generator scattered reports uniformly over Accra's 22 km × 28 km box. With at most 25
+reports and a 300 m radius, only **1 generated set in 300** contained any merge at all —
+so every property was passing over collections of singleton clusters, where
+order-independence is trivially true. The generator now seeds hotspots the way reality
+does, and `test_the_generator_actually_produces_merges` asserts more than half of sets
+contain a real merge, so the file cannot silently rot again. Recorded as **D-022**.
+
+### Verified
+
+| Check | Result |
+|---|---|
+| Full suite | **111 passed** (21 property-based) |
+| Order independence over random shuffles | pass, bit-for-bit identical |
+| Reversal of arrival order | pass |
+| The three-in-a-line counter-example, all 6 orderings | pass |
+| Every report in exactly one cluster | pass |
+| No two distinct clusters are linked | pass |
+| Idempotence — clustering twice changes nothing | pass |
+| Generator produces genuine merges | pass, >50% of sets |
+| Live deployment | **up** |
+
+Hypothesis profiles added (**D-021**): `dev` 50 examples, `default` 150,
+`thorough` 1000 via `HYPOTHESIS_PROFILE=thorough pytest` for the testing report.
+
+New debt: **TD-13** single-linkage chaining along a corridor, **TD-14** O(n²) pair
+comparison. Both with proposed resolutions that preserve order-independence.
+
+Explainer written: `03-clustering-and-order-independence.md`.
+
+### Unresolved
+
+1. **The three clustering environment variables are not yet set on Render.** They have
+   safe defaults in code, so the app runs — but setting them explicitly is what makes
+   TD-03 repayable by configuration rather than redeploy.
+2. Clustering still runs nowhere in production — it is a pure module with no caller until
+   the outbox worker exists at B09.
+3. Clustering parameters still provisional at 300 m / 30 min (TD-03, highest priority).
+4. Student ID and project title still not recorded.
+5. Live URL not yet written into `Deployment_and_Source_Links.txt` — that file does not
+   exist yet.
+
+### Next actions, in order
+
+1. Set the three clustering variables on Render
+2. B06 — confidence scoring with time decay, turning a cluster into a number an officer
+   can act on
+3. B09 — the outbox worker, at which point the outbox rows written since B04 finally get
+   drained and clustering runs for real
+4. D — rich seed data, the point at which the application starts looking like a system
+   rather than a prototype
+
+---
+
 ## 13 August 2026 — Session 6: B03 authentication, B04 report intake
 
 ### What happened

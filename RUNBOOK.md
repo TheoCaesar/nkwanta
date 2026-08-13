@@ -234,6 +234,8 @@ Belt and braces. The ping can lapse; the sentence cannot.
 | `/ready` says `postgis: missing` | Extension never created | Run `CREATE EXTENSION IF NOT EXISTS postgis;` in the Neon SQL editor |
 | `/ready` says `database: unreachable` | Wrong string, or the project is suspended | Re-copy the **pooled** string from Neon |
 | Render build fails on `alembic upgrade head` | `DATABASE_URL` not set in Render | Add it in the dashboard, then **Manual Deploy → Clear build cache & deploy** |
+| Build succeeds, then `RuntimeError: JWT_SECRET is still the development default` and `Exited with status 3` | **The safeguard working.** `generateValue: true` only fires when Render *creates* a service from the blueprint — an existing service does not pick up newly added variables | Generate one with `python -c "import secrets; print(secrets.token_urlsafe(48))"`, then service → **Environment** → **Add Environment Variable** → `JWT_SECRET`. Render redeploys automatically. |
+| `No open ports detected` | The app exited before binding, so the port never opened. A symptom, not the cause | Scroll **up** in the log to the first traceback — that is the real error |
 | Render deploy succeeds, first request hangs ~50 s | Free tier cold start | Expected. See Part 4. |
 | `AttributeError: module 'bcrypt' has no attribute '__about__'` | `passlib` reinstalled from somewhere | Remove it. This project uses `bcrypt` directly — see `app/security.py`. |
 | `bash: pip: command not found` (Git Bash) | Ran `.venv/Scripts/activate` without `source`, so the shell was never activated | `source .venv/Scripts/activate`, then use `python -m pip` |

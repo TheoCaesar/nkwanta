@@ -44,6 +44,18 @@ section, then [`CLAUDE.md`](CLAUDE.md).
 | [`docs/08-technical-debt.md`](docs/08-technical-debt.md) | Live debt register — every shortcut, its cause and its repayment |
 | [`RUNBOOK.md`](RUNBOOK.md) | Run it locally, then deploy it. Written to be executed. |
 
+### Explainers — one per module, written to be defended aloud
+
+| File | Covers |
+|---|---|
+| [`docs/explainers/01-authentication.md`](docs/explainers/01-authentication.md) | Roles, tokens, why there is no driver role, why registration cannot escalate |
+| [`docs/explainers/02-report-intake-and-the-outbox.md`](docs/explainers/02-report-intake-and-the-outbox.md) | The transactional outbox, idempotency, the longitude/latitude trap |
+| [`docs/explainers/03-clustering-and-order-independence.md`](docs/explainers/03-clustering-and-order-independence.md) | Connected components, why incremental assignment fails, float associativity |
+
+Each ends with a thirty-second summary written to be said out loud. Rule 10 of the exam
+paper permits an oral examination on authorship and understanding — see *viva voce* in
+the [glossary](docs/03-glossary.md).
+
 ---
 
 ## The problem, briefly
@@ -124,14 +136,22 @@ see D-012.
 
 ## Status
 
-**Planning and estimation complete. No code yet — and that is deliberate.** The exam paper
-allocates the first 12 of 48 hours to requirements, estimation and design before
-implementation begins.
+**Deployed and running. 111 tests passing, 21 of them property-based.**
 
-The estimate landed hard: Use Case Points puts full scope at **1,948 person-hours**, about
-forty times the examination window. The deliverable is therefore explicitly a *vertical
-slice* — narrow in features, complete in architecture — with a pre-agreed cut list and the
-advanced concept ring-fenced against it.
+| Step | State |
+|---|---|
+| B01 scaffold, health checks, PostGIS | done, deployed |
+| B02 data model — five tables | done |
+| B03 authentication, four roles | done |
+| B04 report intake with the transactional outbox | done |
+| B05 spatio-temporal clustering | done |
+| B06 confidence with time decay | next |
+| B09 outbox worker | after that |
 
-Next up: confirm hours remaining, verify hosting accounts, then deploy an empty application
-before writing any feature code. See [`HANDOFF.md`](HANDOFF.md).
+The estimate that shaped all of this: Use Case Points puts full scope at **1,948
+person-hours**, roughly forty times the original examination window. The deliverable is
+therefore an explicit *vertical slice* — narrow in features, complete in architecture —
+with the advanced concept ring-fenced against every cut.
+
+Current state, open questions and next actions: [`HANDOFF.md`](HANDOFF.md), latest dated
+section.

@@ -1,0 +1,129 @@
+================================================================================
+CSCD602 ADVANCED SOFTWARE ENGINEERING — INDIVIDUAL PROJECT EXAMINATION
+Deployment and Source Links
+================================================================================
+
+Student Name:      [TO BE FILLED IN]
+Student ID:        22424543
+Project Title:     Nkwanta: A Road Incident Reporting and Dispatch System
+                   for Urban Ghana
+
+--------------------------------------------------------------------------------
+PLEASE READ FIRST
+--------------------------------------------------------------------------------
+
+This application is deployed on a free hosting tier. If it has been idle for more
+than 15 minutes, the FIRST request may take up to 60 seconds while the instance
+wakes up. Every request after that is immediate.
+
+A keep-warm ping runs every 10 minutes to reduce the chance of this, but if the
+page seems slow to load, please allow it one minute before concluding it is down.
+
+--------------------------------------------------------------------------------
+LIVE APPLICATION
+--------------------------------------------------------------------------------
+
+Live Application:  [TO BE FILLED IN — https://<service>.onrender.com]
+
+Interactive API:   [same URL]/docs
+                   Full API documentation, generated from the code. Every
+                   endpoint can be called directly from this page. Use the
+                   "Authorize" button with a token from POST /auth/login.
+
+Service status:    [same URL]/ready
+                   Confirms the database is reachable and PostGIS is installed.
+
+Admin URL:         There is no separate admin site. Administrative actions are
+                   API endpoints restricted by role — log in with the admin
+                   account below and use /docs. See "A note on roles".
+
+--------------------------------------------------------------------------------
+TEST CREDENTIALS
+--------------------------------------------------------------------------------
+
+All four accounts are created by the seed script and use the same password for
+convenience during marking.
+
+Password (all accounts):   NkwantaDemo2026
+
+Test Username (commuter):  commuter@nkwanta.demo
+Test Password:             NkwantaDemo2026
+
+Admin Username:            admin@nkwanta.demo
+Admin Password:            NkwantaDemo2026
+
+Additional accounts demonstrating the other two roles:
+
+  Traffic warden:          warden@nkwanta.demo
+  Control room officer:    officer@nkwanta.demo
+
+--------------------------------------------------------------------------------
+A NOTE ON ROLES
+--------------------------------------------------------------------------------
+
+The system has four roles, and the differences are worth seeing:
+
+  commuter  Reports incidents, follows routes, receives warnings.
+            This is what a member of the public gets.
+
+  warden    Field traffic warden. Receives assignments, confirms resolution.
+
+  officer   Control room (MTTD). Sees the dispatch queue, verifies incidents,
+            assigns wardens. THIS IS THE PRIMARY ACTOR — the system exists to
+            do this person's job.
+
+  admin     Creates privileged accounts, moderates, tunes thresholds.
+
+Self-registration always produces a commuter. There is no request that can
+create a privileged account: the registration schema has no role field at all.
+Warden, officer and admin accounts come only from the seed script or from an
+admin calling POST /auth/users.
+
+--------------------------------------------------------------------------------
+SOURCE CODE
+--------------------------------------------------------------------------------
+
+Source Code Repository:  [TO BE FILLED IN — https://github.com/<user>/nkwanta]
+
+The commit history is deliberately structured. Each commit corresponds to a
+build task from the effort estimate (B01 scaffold, B02 data model, B03 auth,
+B04 report intake, and so on), so the sequence of work is visible rather than
+collapsed into a single upload.
+
+--------------------------------------------------------------------------------
+SUGGESTED FIVE-MINUTE WALKTHROUGH
+--------------------------------------------------------------------------------
+
+1. Open the live URL. The map shows current incidents, coloured by confidence.
+
+2. Open /docs and log in as commuter@nkwanta.demo via POST /auth/login.
+   Copy the access_token, click "Authorize", paste it in.
+
+3. POST /reports with latitude 5.6037 and longitude -0.1870 (Kwame Nkrumah
+   Circle) and incident_type "accident". Watch it appear on the map.
+
+4. Try the same report with the coordinates swapped. It is rejected with a
+   message naming the likely cause — PostGIS orders points as
+   (longitude, latitude), which is the reverse of how people speak, and a
+   swap silently moves Accra 600 km out to sea.
+
+5. Log in as officer@nkwanta.demo to see the dispatch queue: incidents ranked
+   by confidence, with the contributing reports and the weight each one carried.
+
+--------------------------------------------------------------------------------
+WHERE TO FIND THINGS IN THE SUBMISSION
+--------------------------------------------------------------------------------
+
+  docs/01-exam-requirements.md   The mark scheme, and one discrepancy noted in
+                                 the paper itself (Part E sums to 48, not 50)
+  docs/02-problem-and-scope.md   Problem, stakeholders, what was cut and why
+  docs/03-glossary.md            Every technical term in plain English
+  docs/04-advanced-concept.md    The advanced concept, explained without jargon
+  docs/05-decision-log.md        22 dated decisions with alternatives and costs
+  docs/06-effort-estimation.md   Use Case Points, and how the estimate cut scope
+  docs/07-build-schedule.md      Hour-by-hour plan with pre-agreed cut triggers
+  docs/08-technical-debt.md      14 debt items, recorded as they were incurred
+  docs/explainers/               One plain-language walkthrough per module
+  HANDOFF.md                     Dated running log of every working session
+
+================================================================================
