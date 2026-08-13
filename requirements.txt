@@ -9,6 +9,7 @@
 # --- web ---------------------------------------------------------------------
 fastapi==0.141.1
 uvicorn[standard]==0.52.2
+python-multipart==0.0.20    # required for file uploads; FastAPI errors at import without it
 
 # --- database ----------------------------------------------------------------
 SQLAlchemy==2.0.52          # 2.0.50+ is the first with cp314 wheels

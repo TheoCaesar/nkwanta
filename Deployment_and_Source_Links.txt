@@ -120,6 +120,14 @@ SUGGESTED FIVE-MINUTE WALKTHROUGH
    by confidence, with the contributing reports and the weight each one
    carried, so the score can be explained rather than merely displayed.
 
+6. As the officer, assign a warden to a verified incident, then log in as
+   warden@nkwanta.demo and resolve it. Watch the reporters' reputations move
+   in the response. Resolving as "false_alarm" moves them the other way.
+
+   Note what is refused: an incident that is not yet verified cannot be
+   assigned, and an incident nobody was sent to cannot be resolved. Those
+   refusals are the state machine, not validation.
+
 --------------------------------------------------------------------------------
 WHERE TO FIND THINGS IN THE SUBMISSION
 --------------------------------------------------------------------------------
@@ -133,7 +141,18 @@ WHERE TO FIND THINGS IN THE SUBMISSION
   docs/06-effort-estimation.md   Use Case Points, and how the estimate cut scope
   docs/07-build-schedule.md      Hour-by-hour plan with pre-agreed cut triggers
   docs/08-technical-debt.md      14 debt items, recorded as they were incurred
-  docs/explainers/               One plain-language walkthrough per module
+  docs/explainers/               One plain-language walkthrough per module,
+                                 each ending with a spoken summary
   HANDOFF.md                     Dated running log of every working session
+
+Two entries worth reading if time is short:
+
+  docs/05-decision-log.md        D-029 supersedes D-028 and says why the
+                                 original reasoning was wrong. The superseded
+                                 entry is kept unedited.
+
+  docs/explainers/07             Section 6 describes a real invariant violation
+                                 that property-based testing found in code which
+                                 had already passed review and been deployed.
 
 ================================================================================

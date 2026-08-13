@@ -47,6 +47,11 @@ urgent than debt that merely sits there.
 | TD-15 | Noisy-OR assumes independent reports; crowds overstate confidence | A | Medium | B06 |
 | TD-16 | Rebuild neighbourhood bound is a guess, could miss a distant merge | A | Low | B09 |
 | TD-17 | Demo seed and drain endpoints exist on the production deployment | **C** | Low now, critical before real use | D |
+| TD-18 | One database for development and production; no staging | S | High before real use | D |
+| TD-19 | Media in the database rather than object storage | S | High under adoption | F |
+| TD-20 | Client-declared audio duration is unverified | A | Low | F |
+| TD-21 | Gateway can be deliberately broken on the live deployment | **C** | Low now, critical before real use | C |
+| TD-22 | Stored confidence decays only when the sweep runs | A | Low | C |
 
 Items added during B02 onward are appended in build order.
 
@@ -125,6 +130,154 @@ stretch of the Tema Motorway.
 (they are already read from environment variables, so this is a data change rather than a
 code change). Then tune against labelled real incidents once any exist. Flooding needs a
 materially wider radius than a collision.
+
+---
+
+## TD-22 — Stored confidence decays only when a sweep runs
+
+**Debt.** Confidence is calculated when reports arrive and written to the incident row. It
+does not decay continuously. A periodic sweep (every five minutes) fades incidents whose
+newest report is more than eight half-lives old, but between sweeps the stored figure is
+whatever it was when the last report landed.
+
+**Cause.** The alternative is recomputing decay on every read, which makes the map query
+expensive and makes its results depend on the moment you asked rather than on the data.
+
+**Impact.** An incident's confidence can be **overstated by up to five minutes of decay** —
+at a 45-minute half-life, about 7%. Enough to keep something marginally above a threshold
+slightly longer than it should be; not enough to affect a decision anybody would make
+differently.
+
+The sweep itself is also an approximation: it uses time since the newest report rather than
+recomputing the full noisy-OR. Eight half-lives is a factor of 256, so anything it clears
+was genuinely below the stale threshold, but the *value it writes down* is a scaled
+estimate rather than an exact recomputation.
+
+**Priority.** Low. Both errors are small and both err towards keeping incidents alive
+slightly too long, which is the safer direction.
+
+**Class.** A — acceptable, with the magnitude of the error quantified rather than waved at.
+
+**Worth recording:** this was invisible until the advisory was built. Decay was correct in
+`confidence.py`, fully property-tested, and applied to nothing that was sitting still. A
+unit-tested function can be right in isolation and unreached in practice.
+
+**Proposed resolution.** Recompute exactly during the sweep by re-scoring from
+`incident_reports`, and shorten the interval. Or move decay into the read query as a
+generated expression, which PostgreSQL can index, and drop the stored column entirely.
+
+---
+
+## TD-21 — A gateway that can be told to fail exists in production
+
+**Debt.** `ControllableGateway` and the `POST /admin/gateway/fail` endpoint let an
+administrator deliberately break outbound delivery, and both are present on the live
+deployment.
+
+**Cause.** A circuit breaker whose behaviour cannot be shown is a paragraph in a document.
+One that can be tripped live, on request, in thirty seconds, is evidence. This exists for
+the demonstration, and stating that plainly is better than presenting it as resilience
+engineering.
+
+**Impact.** An administrator can disable notification delivery. Bounded — the notification
+rows are still written and users still see them in the application, so nothing is lost —
+but it is a switch that turns off a safety feature, on a public deployment, with a password
+published in the submission.
+
+**Priority.** Low for an examination artefact, **critical** before real use.
+
+**Class.** C — critical, in the same sense as TD-17: it must not survive contact with real
+users.
+
+**Proposed resolution.** Register the gateway control endpoints only when
+`ENVIRONMENT != "production"`, so they cannot be reached rather than merely being
+protected, and default the deployed build to `LoggingGateway`.
+
+---
+
+## TD-19 — Media is stored in the database rather than in object storage
+
+**Debt.** Voice notes and photographs are stored as binary columns in PostgreSQL, capped
+at 512 KB and 250 KB respectively.
+
+**Cause.** Object storage means a fourth hosting account, a fourth set of credentials and
+a fourth thing that can fail on deploy day, on a project whose largest sustained risk was
+deployment. Neon's 0.5 GB holds roughly a thousand capped attachments, far more than a
+demonstration needs. Recorded at the time as decision D-019.
+
+**Impact.**
+- Database backups grow with media rather than with data, and restore times with them.
+- Binary rows compete with the query workload for the buffer cache. *Partly mitigated*:
+  attachments live in their own table, which nothing scans, so audio nobody is playing
+  costs nothing. The mitigation would not exist had the bytes been columns on `reports`.
+- Every playback is proxied through the API, so serving media consumes application
+  capacity that should be answering requests.
+- The 0.5 GB free tier becomes a hard ceiling on total uploads.
+
+**Priority.** Low at demonstration scale, **high** with real users — this is the item
+that fails first under adoption.
+
+**Class.** S — scheduled.
+
+**Proposed resolution.** Cloudflare R2 or equivalent, with presigned URLs so the API
+never touches the bytes at all: it issues a URL, the client uploads directly, and
+playback goes straight from storage. The `attachments` table keeps its metadata rows and
+gains a key column in place of `data`, so the change is contained to one table and one
+service module.
+
+---
+
+## TD-20 — Client-declared audio duration is not verified
+
+**Debt.** `duration_seconds` on an attachment is whatever the client says it is. Nothing
+decodes the file to check.
+
+**Cause.** Verifying it means decoding audio server-side, which means `ffmpeg` or a
+codec library — a substantial dependency for a value that is displayed and never acted
+upon.
+
+**Impact.** An officer could be shown "0:12" for a clip that is actually thirty seconds.
+Mildly misleading, and no decision depends on it. The **size cap is the real limit**, and
+that is enforced in both the upload handler and a database constraint.
+
+**Priority.** Low.
+
+**Class.** A — acceptable, provided nothing ever starts making decisions from this field.
+
+**Proposed resolution.** Either decode and verify on upload, or stop storing it and read
+the duration in the browser at playback time, which is where it is actually needed.
+
+---
+
+## TD-18 — One database serves both development and production
+
+**Debt.** The local development environment and the deployed service point at the same
+Neon database. There is no staging environment and no separate development data.
+
+**Cause.** Neon's free tier allows more than one project, so this was avoidable — it was
+not avoided because a single connection string is one less thing to configure wrongly
+during a 48-hour build, and because the demonstration data needs to be visible on the
+live site anyway.
+
+**Impact.** Running the seed script locally changes what an examiner sees. A careless
+migration or a stray `--reset` during development would take the live deployment with
+it. There is no environment in which to test a destructive change safely, which means
+destructive changes get tested in production or not at all.
+
+**Priority.** Low for an examination artefact, **high** for anything real.
+
+**Class.** S — scheduled.
+
+**Proposed resolution.** A second Neon project for development, with `DATABASE_URL` in
+`.env` pointing at it and only Render's environment pointing at production. Costs
+nothing on the free tier; it was a time decision rather than a money one, which is worth
+stating plainly rather than dressing up.
+
+**A related bootstrap wrinkle**, recorded here because it is the same root cause:
+`POST /admin/seed` requires an admin account that only the seed creates, so on a fresh
+database the endpoint cannot be reached and the command-line script must run first. With
+a separate development database this would have surfaced during setup rather than at
+demonstration time.
 
 ---
 

@@ -16,7 +16,8 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from app.models import IncidentStatus, IncidentType, UserRole
+from app.lifecycle import Resolution
+from app.models import AttachmentKind, IncidentStatus, IncidentType, UserRole
 
 
 # --- authentication -----------------------------------------------------------
@@ -138,6 +139,83 @@ class IncidentResponse(BaseModel):
 
 class IncidentDetailResponse(IncidentResponse):
     evidence: list[EvidenceResponse]
+    allowed_actions: list[str] = []
+
+
+# --- dispatch -----------------------------------------------------------------
+
+
+class AssignRequest(BaseModel):
+    warden_id: uuid.UUID
+
+
+class ResolveRequest(BaseModel):
+    resolution: Resolution
+    note: str | None = Field(default=None, max_length=500)
+
+
+class ReputationChange(BaseModel):
+    user_id: uuid.UUID
+    display_name: str
+    reputation: float
+    reports_confirmed: int
+    reports_contradicted: int
+
+
+class ResolveResponse(BaseModel):
+    incident: IncidentResponse
+    reputations_updated: list[ReputationChange]
+
+
+class AttachmentResponse(BaseModel):
+    """Metadata only. The bytes are fetched separately from `url`, and that route is
+    restricted — a voice note identifies its speaker."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    report_id: uuid.UUID
+    kind: AttachmentKind
+    content_type: str
+    byte_size: int
+    duration_seconds: float | None
+    created_at: dt.datetime
+    url: str
+    is_public: bool
+
+
+class CorridorResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    description: str | None
+    following: bool
+
+
+class NotificationResponse(BaseModel):
+    """`incident_key` rather than an incident id, because incident rows are recreated on
+    every rebuild and their ids do not survive it."""
+
+    id: uuid.UUID
+    incident_key: uuid.UUID
+    incident_type: IncidentType
+    message: str
+    confidence: float
+    created_at: dt.datetime
+    read_at: dt.datetime | None
+
+
+class VisibilityRequest(BaseModel):
+    """Consent is withdrawable. A choice that cannot be reversed is not a choice."""
+
+    is_public: bool
+
+
+class WardenResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    display_name: str
+    reputation: float
 
 
 class ReportAccepted(BaseModel):

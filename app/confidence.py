@@ -63,6 +63,12 @@ DEFAULT_HALF_LIFE_MINUTES = 45.0
 # reliable reporters.
 DEFAULT_EVIDENCE_STRENGTH = 0.45
 
+# How much more a report carrying a voice note or photograph counts. Deliberately
+# modest: recorded evidence is harder to fabricate than a tapped coordinate, but it is
+# still not proof, and the bonus is capped so an attachment can never on its own push a
+# report past the escalation threshold.
+EVIDENCE_BONUS = 1.25
+
 # Where an incident moves from "someone said something" to "tell the police".
 THRESHOLD_CORROBORATED = 0.35
 THRESHOLD_VERIFIED = 0.70
@@ -123,14 +129,30 @@ def report_weight(
     age_minutes: float,
     half_life_minutes: float = DEFAULT_HALF_LIFE_MINUTES,
     evidence_strength: float = DEFAULT_EVIDENCE_STRENGTH,
+    recorded_evidence: bool = False,
 ) -> float:
-    """Evidence contributed by one report, in the range [0, 1)."""
+    """Evidence contributed by one report, in the range [0, 1).
+
+    `recorded_evidence` is set when the report carries a voice note or photograph. Such
+    a report counts for more, because a recording is far harder to fabricate from an
+    armchair than a tapped coordinate: it demonstrates the reporter was somewhere with
+    something to describe.
+
+    The bonus is modest and **capped**, so an attachment can never on its own carry a
+    report past the escalation threshold. Corroboration still does that. A larger bonus
+    would turn "attach any audio file" into a way of buying credibility.
+    """
     if not 0.0 <= reputation <= 1.0:
         raise ValueError(f"reputation must be within [0, 1], got {reputation}")
     if not 0.0 <= evidence_strength <= 1.0:
         raise ValueError(f"evidence_strength must be within [0, 1], got {evidence_strength}")
 
-    return reputation * decay_factor(age_minutes, half_life_minutes) * evidence_strength
+    weight = reputation * decay_factor(age_minutes, half_life_minutes) * evidence_strength
+    if recorded_evidence:
+        weight *= EVIDENCE_BONUS
+
+    # Never past the ceiling a single report is allowed to reach.
+    return min(weight, evidence_strength)
 
 
 def combine(weights: Sequence[float]) -> float:
@@ -159,6 +181,7 @@ def score(
     now: dt.datetime,
     half_life_minutes: float = DEFAULT_HALF_LIFE_MINUTES,
     evidence_strength: float = DEFAULT_EVIDENCE_STRENGTH,
+    with_recorded_evidence: set[uuid.UUID] | None = None,
 ) -> ConfidenceResult:
     """Score one incident from its reports.
 
@@ -172,6 +195,8 @@ def score(
     if not reports:
         return ConfidenceResult(confidence=0.0, evidence=())
 
+    recorded = with_recorded_evidence or set()
+
     evidence: list[Evidence] = []
     for report_id, reputation, occurred_at in sorted(reports, key=lambda r: r[0]):
         age = (now - occurred_at).total_seconds() / 60.0
@@ -180,7 +205,13 @@ def score(
                 report_id=report_id,
                 reporter_reputation=reputation,
                 age_minutes=age,
-                weight=report_weight(reputation, age, half_life_minutes, evidence_strength),
+                weight=report_weight(
+                    reputation,
+                    age,
+                    half_life_minutes,
+                    evidence_strength,
+                    recorded_evidence=report_id in recorded,
+                ),
             )
         )
 

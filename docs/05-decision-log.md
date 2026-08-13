@@ -9,6 +9,353 @@ Format: what was decided, what else was considered, why, and what it costs.
 
 ---
 
+## 13 August 2026 — C circuit breaker and clearance
+
+### D-035 — Every time-dependent module takes `now` as an argument
+
+**Decided:** `circuit_breaker`, `confidence`, `clustering` and `staleness` all receive the
+current time as a parameter. None of them calls `datetime.now()`.
+
+**Considered:** reading the clock where it is needed, which is shorter.
+
+**Why:** It is what makes time-dependent behaviour testable at all. A thirty-second
+cooling-off period is verified by passing a timestamp thirty seconds later, in
+microseconds. **A test suite that waits thirty seconds to check a thirty-second timeout is
+one nobody runs, and one nobody runs stops being true.**
+
+It also removes a whole class of flakiness. A test that reads the clock passes or fails
+depending on when it happens to execute.
+
+**Costs.** Slightly more verbose call sites, and one place — the worker loop — still has to
+read the clock, because something must. That boundary is where the impurity is confined,
+deliberately.
+
+---
+
+### D-034 — A circuit breaker guards the outbound gateway
+
+**Decided:** Five consecutive failures open the breaker for thirty seconds, after which a
+single test call is allowed. One failure from half-open re-opens immediately.
+
+**Considered:** simple retry with backoff and no breaker.
+
+**Why:** Retry alone does not solve the actual failure. When a provider is down, each
+attempt costs a thirty-second timeout, so fifty queued notifications become twenty-five
+minutes of the worker doing nothing but waiting — holding connections and starving
+everything else. **Someone else's outage becomes ours.** The breaker converts a
+thirty-second wait into a microsecond refusal.
+
+Consecutive rather than total failures, because scattered failures are a blip and a total
+counter would eventually trip on a healthy provider. One failure from half-open rather than
+another five, because the test call was the point and four more failures means four more
+thirty-second timeouts to learn what we already know.
+
+**Costs.** While open, notifications are not delivered — but they are **not lost**: the
+rows are already in the database and users see them in the application. Delivery is the
+optional extra, which is exactly why giving up on it quickly is safe.
+
+The demonstration gateway that can be told to fail is real debt (**TD-21**) and must not
+survive to production.
+
+---
+
+### D-033 — A clearance goes to the people who were warned, not to a recomputed audience
+
+**Decided:** When an incident is resolved or ages out, the clearance notification is sent
+to exactly the users who received the original advisory, read from the notifications
+already stored.
+
+**Considered:** recomputing corridor matches at clearance time, which needs no extra
+lookup.
+
+**Why:** Two reasons, and the second would have bitten.
+
+Consistency: nobody should be told a road has cleared when they were never told it was
+blocked.
+
+And an incident's centroid **moves** as reports accumulate — clustering recomputes it every
+rebuild. Recomputing the match at clearance time could therefore reach a different set of
+people, leaving some commuters permanently believing a road is shut. The set that was
+warned is a fact; the set that would match now is a recalculation, and they are not the
+same thing.
+
+The clearance outbox row is written in the same transaction as the resolution, for the same
+reason intake writes its outbox row alongside the report: a crash in between would leave
+commuters believing a road is blocked forever, which is worse than never having warned
+them.
+
+**Costs.** A clearance for an incident whose advisory was never delivered reaches nobody,
+which is correct. Three separate wordings to maintain — resolved, false alarm, expired —
+because "we fixed it" and "there was nothing there" are different facts and a commuter
+judging whether to trust the next warning deserves to know which.
+
+**Prompted by review:** the gap was noticed when the author asked why the system only ever
+reports blockages. A system that never reports clearances trains people to ignore it.
+
+---
+
+## 13 August 2026 — B corridors and commuter advisory
+
+### D-032 — Incidents carry a stable cluster key separate from their primary key
+
+**Decided:** `incidents.cluster_key` holds the smallest contributing report id. Anything
+that needs to remember an incident across time — notifications, advisory idempotency keys
+— references that rather than `incidents.id`.
+
+**Considered:** keying on the primary key; making the projector update incidents in place
+so ids survive.
+
+**Why:** The projector deletes and recreates incident rows on every rebuild, because a new
+report can merge two previously separate incidents and an append-only algorithm could never
+discover that (D-020, explainer 05). Consequently `incidents.id` identifies *a row*, not
+*an event*, and a notification keyed on it would be orphaned by the very next nearby
+report — the same commuter warned twice about the same jam.
+
+The cluster key survives because cluster membership is order-independent, so the minimum
+member id is a property of which reports belong together rather than of when they arrived.
+Updating in place was rejected because it reintroduces exactly the order dependence D-020
+exists to eliminate.
+
+**Costs.** One more column, and a second identity concept to explain. Backfilled with
+`gen_random_uuid()` for existing rows, which is safe only because incidents are fully
+derived and every rebuild overwrites it.
+
+---
+
+### D-031 — Advisory fan-out happens in the worker, not the projector
+
+**Decided:** When an incident crosses the advisory threshold the projector writes **one**
+outbox row. The worker matches corridors and creates one notification per subscriber.
+
+**Considered:** looking up subscribers directly in the projector, which is fewer moving
+parts.
+
+**Why:** A busy corridor may have thousands of followers. Fanning out inside the request
+that accepted a report would make submission slow in proportion to a road's popularity —
+**the system would be slowest exactly when an incident matters most**. One small row keeps
+submission constant-time and moves the expensive work to where being slow is harmless.
+
+The same reasoning as the original outbox decision, applied one level further out.
+
+**Costs.** A second event type and handler, and a rebuilt incident may briefly exist before
+its advisory is processed. Bounded by the poll interval, two seconds.
+
+---
+
+### D-030 — Commuters are warned at 0.35; police are called at 0.70
+
+**Decided:** Advisory notifications fire at the corroborated threshold. Dispatch still
+requires verified.
+
+**Considered:** one threshold for both, which is simpler to explain.
+
+**Why:** The two decisions carry different costs of being wrong. Sending a warden to
+nothing wastes a person who was needed at a real junction; telling a commuter about
+something that turns out to be clear costs them a glance at a map. A single threshold
+either spams wardens or leaves commuters uninformed about things the system already
+half-believes.
+
+The advisory threshold still sits above a single report — one report from an average
+account scores about 0.225 — so no individual's unsupported word warns a whole corridor.
+
+**Costs.** Some advisories will be about incidents that never reach verification, which is
+the intended trade rather than a defect. Two thresholds to keep straight, both named
+constants rather than literals.
+
+**Not yet addressed:** nothing tells a commuter when a road *clears*. A system that reports
+blockages and never reports clearances trains people to ignore it. Recorded as a gap.
+
+---
+
+## 13 August 2026 — F voice notes
+
+### D-027 — Centroids use fsum and are clamped to their bounding box
+
+**Decided:** `clustering.centroid` computes the mean with `math.fsum` and clamps the
+result to the minimum and maximum of the values it averaged.
+
+**Considered:** leaving it; widening the property test to a tolerance.
+
+**Why:** A property test failed on three *identical* longitudes whose mean came out one
+unit in the last place below the minimum input. Nothing overflows — the exact mean is not
+representable in binary floating point, and the nearest representable value sits outside
+the input range.
+
+Physically femtometres, and meaningless. As an invariant it was false, and a centroid
+escaping its own members' bounding box is the sort of thing that violates a database
+constraint two years later, in a stack trace nobody can explain.
+
+Widening the assertion to a tolerance was rejected for the same reason it was rejected in
+D-020: the property being claimed is exact, and an approximate test claims something
+weaker than the documentation does.
+
+**Costs.** `fsum` is marginally slower than `sum`. Irrelevant at cluster sizes measured in
+tens.
+
+**Worth recording separately:** no example-based test would have found this. It needs
+several identical coordinates with an unlucky bit pattern, which nobody writes by hand.
+This is the concrete answer to "what did property-based testing actually buy you" — a real
+invariant violation in code that had been passing, reviewed and deployed for several
+sessions.
+
+---
+
+### D-026 — Recorded evidence raises a report's weight, but is capped
+
+**Decided:** A report carrying a voice note or photograph is weighted 1.25× in the
+confidence calculation, with the result capped at the existing single-report ceiling of
+0.45.
+
+**Considered:** treating attachments as presentation only, with no effect on confidence.
+
+**Why:** A recording is materially harder to fabricate from an armchair than a tapped
+coordinate — it demonstrates the reporter was somewhere with something to describe. That
+is genuine evidence and ignoring it would waste it.
+
+The cap is what keeps it honest. A weighted report still cannot reach the 0.70 escalation
+threshold alone, so corroboration remains the only route to verification. Without the cap,
+"attach any audio file" becomes a way of buying credibility. The bonus also *multiplies*
+reputation rather than replacing it, so a discredited account cannot restore its standing
+by attaching audio.
+
+**Costs.** One more constant fitted to no data (TD-04). One extra query per rebuild to
+find which reports carry evidence — batched across the whole neighbourhood, not per
+report. `score()` gained an optional parameter, chosen over a required one specifically so
+that all 53 existing confidence property tests were unaffected; a test asserts both paths
+agree when no evidence is present.
+
+---
+
+### D-029 — The reporter decides who hears their recording — supersedes D-028
+
+**Decided:** Attachments carry an `is_public` flag, set by the reporter at upload and
+changeable by them at any time. Default off. A shared recording plays for anyone,
+including signed-out visitors. An unshared one plays only for its owner and the control
+room, and is omitted entirely from listings rather than merely refused.
+
+**What was wrong with D-028.** Two things, and the first is an error of reasoning rather
+than of judgement.
+
+It **conflated two different privacy concerns**. NFR-4 protects the *reported party* —
+the person being accused. D-028 applied it to the *reporter*. Those are different, and
+the second does not follow from the first: a flood on Spintex Road accuses nobody, so
+there is no reported party to protect and the justification simply did not apply.
+
+It also **discarded most of the value of capturing voice**. "Tipper truck across two
+lanes, backed up to Odorna" tells a commuter far more than *accident, confidence 0.88*.
+Locking that away made the feature almost pointless for the people it was built for.
+
+**Why consent rather than a blanket rule either way.** The concern is real but *narrow*.
+It bites on accusatory reports — naming a trotro driver, reporting a violation — where a
+speaker may be recognised by the person they accused. It does not bite on flooding. No
+single rule fits both, and the reporter is the only person who knows which case they are
+in. So they are asked.
+
+Consent is **withdrawable**, and only the reporter may change it — not even an officer.
+Consent somebody else can give on your behalf is not consent, and consent that cannot be
+withdrawn is not a choice.
+
+**Costs.** One column, one migration, one more thing for a client to display. Existing
+attachments default to private, because they were uploaded with no opportunity to consent
+and retroactively publishing them would be exactly what this column exists to prevent.
+
+**What this does not solve.** A reporter who wants to help but does not want their voice
+public still has to choose between the two. The real resolution is **transcription** —
+publish the text, restrict the audio, and nobody has to choose. That has been moved from
+"nice to have" to the top of the evolution plan as a direct consequence.
+
+**Credit where due:** this was raised in review by the author, who asked why other users
+should be denied information that would help them judge an incident. The original
+reasoning did not survive the question.
+
+---
+
+### D-028 — Attachment playback is restricted; incidents remain public
+
+> **Superseded by D-029 on 13 August 2026.** The reasoning below conflated protecting a
+> reported party with protecting a reporter, and cost more transparency than it needed
+> to. Retained unedited, because a decision log that quietly deletes its mistakes is not
+> a record of anything.
+
+**Decided:** Incident data is public. Attachment bytes are readable only by the person who
+uploaded them and by the control room. An unauthorised request returns 404, not 403.
+
+**Considered:** making attachments as public as the incidents they belong to.
+
+**Why:** **A voice recording identifies its speaker.** It is closer to biometric data than
+to a text note. NFR-4 exists because a system where people report one another to the
+police is a harassment vector, and audio is exactly what would expose a reporter.
+
+404 rather than 403 because a 403 confirms the attachment exists, which is itself
+information about somebody else's report.
+
+**Costs.** A commuter cannot hear the evidence behind an incident they are looking at,
+which is a real loss of transparency. Accepted: the alternative exposes reporters, and
+between transparency and safety this system chooses safety — the same reasoning that put
+NFR-4 in the SRS in the first place.
+
+---
+
+## 13 August 2026 — B08 lifecycle and reputation
+
+### D-025 — Reputation is a Beta posterior, not a success ratio
+
+**Decided:** `reputation = (confirmed + 2) / (confirmed + contradicted + 4)`, floored at
+0.02 and capped at 0.98. Updated only when an incident is resolved, once per reporter
+regardless of how many reports they filed.
+
+**Considered:** a plain success ratio; a fixed increment per outcome; leaving reputation
+static as it had been.
+
+**Why:** A plain ratio gives 1.0 after one confirmed report and 0.0 after one
+contradiction. The first is an attack — file one true report, become fully trusted, then
+fabricate. The second is unjust, since a road can genuinely clear before a warden
+arrives. The prior removes both: one confirmation moves a new account from 0.50 to 0.60,
+and reaching 0.9 takes roughly eighteen.
+
+The floor exists because a reporter at exactly zero could never recover — every report
+would carry zero weight, so none could ever be confirmed. A trap with no exit.
+
+Counting distinct reporters rather than reports stops spamming from being the fastest
+route to a high reputation.
+
+**Costs.** The prior weight of 2 is another constant fitted to no data (TD-04). Trust is
+lost faster than it is gained by construction, which is intended — the cost of a false
+report must exceed the benefit of a true one — but it does mean an unlucky reporter is
+penalised for a road that cleared before anyone arrived.
+
+---
+
+### D-024 — The lifecycle is a table of rules, not checks in handlers
+
+**Decided:** Legal transitions live in one dictionary keyed by action, each entry naming
+the states it may start from, the state it produces and the roles permitted. Anything
+absent is refused.
+
+**Considered:** conditional checks inside each route handler, which is the usual approach.
+
+**Why:** Scattered checks are how the third handler someone adds becomes the one that
+forgets. A table makes illegal moves unrepresentable rather than merely guarded, and it
+makes the machine readable in one screen — a state machine you have to reconstruct from
+five handlers is one nobody will reason about correctly.
+
+The same table drives the interface through `allowed_actions`, so a button that would be
+refused is never offered. A property test asserts the two agree for every combination of
+state, action and role.
+
+Two constraints are worth stating separately because they encode policy rather than
+mechanics. **An unverified incident cannot be assigned** — otherwise the escalation
+threshold is decoration. **An incident nobody was sent to cannot be resolved** —
+otherwise the queue can be cleared by wishful thinking, and resolution stops being usable
+as evidence about the reporters.
+
+**Costs.** One more module, and the per-incident check that a warden may only resolve
+what they were assigned lives in the service rather than the table, because it depends on
+the specific incident rather than the state. That split is a small inconsistency and is
+documented where it occurs.
+
+---
+
 ## 13 August 2026 — B06 confidence
 
 ### D-023 — Confidence combines evidence with noisy-OR, not a sum

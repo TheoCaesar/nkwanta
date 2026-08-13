@@ -9,6 +9,462 @@ what comes next.
 
 ---
 
+## 13 August 2026 — Session 15: clearance notifications and the circuit breaker
+
+### What happened
+
+Two features, and building the first exposed a defect that had been present since B06.
+
+**Clearance notifications.** A system that reports blockages and never reports clearances
+trains people to ignore it. Three reasons a road stops being a problem, each worded
+differently: `resolved` (someone attended, it is clear), `false_alarm` (someone attended
+and found nothing), `expired` (nobody ever confirmed it). Distinguishing the second from
+the first matters — "we fixed it" and "there was nothing there" are different facts, and a
+commuter judging whether to trust the *next* warning deserves to know which they got.
+
+**The audience is the audience of the original warning** (**D-033**), read from the
+notifications already sent rather than recomputed from corridors. An incident's centroid
+*moves* as reports accumulate, so recomputing at clearance time could reach a different set
+of people and leave some commuters permanently believing a road is shut. The set that was
+warned is a fact; the set that would match now is a recalculation.
+
+The clearance outbox row is written **in the same transaction as the resolution**, for the
+same reason intake writes its outbox row alongside the report.
+
+### The defect the advisory revealed
+
+**Stored confidence never decayed.**
+
+Confidence is calculated when reports arrive and written to the incident row. Decay is
+applied at the moment of calculation, and calculation only happens during a rebuild, which
+only happens when a new report lands nearby.
+
+So an incident reported once at 07:00 and never mentioned again kept its 07:00 confidence
+**forever** — sitting on the map at 0.22 at midnight, hours after it had decayed to nothing
+in principle.
+
+The decay in `confidence.py` was correct, fully property-tested, and **applied to nothing
+that was sitting still.** A unit-tested function can be right in isolation and unreached in
+practice. That is worth saying out loud, because 53 passing property tests did not catch
+it — only building a feature that depended on the behaviour did.
+
+Fixed with a periodic sweep in the worker (`app/services/staleness.py`): every five minutes
+it fades incidents whose newest report is more than eight half-lives old, writes the decayed
+value down, and emits a clearance. It only touches incidents in a **computed** state — a
+warden already at a junction must not be stood down because the reports that summoned them
+decayed. Remaining approximation quantified as **TD-22**.
+
+### The circuit breaker
+
+Five consecutive failures open it for thirty seconds; one test call is then allowed; a
+single failure from half-open re-opens immediately.
+
+The problem it solves is not correctness — every line behaves as written. When a provider
+is down, each attempt costs a thirty-second timeout, so fifty queued notifications become
+twenty-five minutes of the worker doing nothing but waiting. **Someone else's outage
+becomes ours.** The breaker turns a thirty-second wait into a microsecond refusal.
+
+Verified behaviour, walked through:
+
+```
+07:00:00  closed     start
+07:00:00  closed     failure 1, 2
+07:00:00  open       failure 3 -> tripped
+07:00:10  open       still refusing instantly
+07:00:30  half_open  will allow one test call
+07:00:31  open       test call failed -> open again
+07:01:02  half_open  another 30s
+07:01:02  closed     test call worked -> normal
+```
+
+**The clock is a parameter, not a call** (**D-035**). That is what makes a thirty-second
+timeout testable in microseconds. Every time-dependent module in the project now follows
+this — `confidence`, `clustering`, `staleness`, `circuit_breaker` — with the worker loop as
+the single place the impurity is confined.
+
+Notifications are **not lost** when the breaker is open: the rows are already in the
+database and users see them in the application. Delivery is the optional extra, which is
+exactly why giving up on it quickly is safe.
+
+**Demonstrable in about a minute** via `/admin/gateway/fail`, `/admin/drain`,
+`/admin/gateway`, `/admin/gateway/heal`.
+
+### Verified
+
+| Check | Result |
+|---|---|
+| Full suite | **309 passed, 8 skipped** |
+| 34 documented API paths | pass |
+| Breaker trips exactly at the threshold (property test) | pass |
+| A success resets the consecutive run | pass |
+| Half-open allows one call; one failure re-opens | pass |
+| Rejections counted separately from failures | pass |
+| Counters never disagree with calls attempted (property) | pass |
+| Clearance wording differs per reason, no internal identifiers | pass |
+| Clearance key derived, stable, distinct from the advisory key | pass |
+
+New debt: **TD-21** the deliberately-breakable gateway on the live deployment (critical
+before real use), **TD-22** stored confidence decays only when the sweep runs, with the
+error quantified at about 7% between sweeps.
+
+Explainer written: `09-circuit-breaker-and-clearance.md`.
+
+### Unresolved
+
+1. **Migrations not applied** — `alembic upgrade head`, then reseed with `--reset`.
+2. No quiet hours; everyone following a road hears, including someone heading elsewhere.
+3. Keep-warm ping still not configured.
+
+### Next actions, in order
+
+1. `alembic upgrade head`, `python -m scripts.seed_demo --reset`, `pytest`, commit, push
+2. **B22 — the web page.** The map, report form, dispatch queue and notifications. This is
+   the last build item; everything after it is documentation and packaging.
+
+---
+
+## 13 August 2026 — Session 14: B corridors and the commuter advisory
+
+### What happened
+
+**The commuter half of the product now exists.** Everything before this served the control
+room; this is what a member of the public gets back for reporting. It is also the first
+time the outbox delivers something a *user* can see.
+
+**Corridors are LINESTRINGs, not points.** "Is this incident on my route?" is a question
+about distance from a line, which `ST_DWithin` answers directly in metres against the GiST
+index. A corridor modelled as a centre point with a radius could not answer it — a circle
+covering the 20 km Tema Motorway would cover half of Accra.
+
+**Two thresholds, deliberately** (**D-030**). Commuters are warned at 0.35; police are
+called at 0.70. Not an inconsistency: sending a warden to nothing wastes someone needed at
+a real junction, while telling a commuter about something that turns out to be clear costs
+a glance at a map. Different costs of being wrong, different thresholds. Still above a
+single report, so nobody's unsupported word warns a whole corridor.
+
+**The fan-out is in the worker** (**D-031**). The projector writes *one* outbox row however
+many people follow the road. Doing the fan-out during submission would make it slow in
+proportion to a corridor's popularity — the system would be slowest exactly when an
+incident matters most.
+
+### The subtle one: identity
+
+`incidents.id` is **useless for remembering anything**. The projector deletes and recreates
+incident rows on every rebuild, so a notification keyed on the primary key would be
+orphaned by the very next nearby report, and the same commuter would be warned twice about
+the same jam.
+
+Added `incidents.cluster_key` — the smallest contributing report id (**D-032**). It
+survives rebuilds because cluster membership is order-independent, so the minimum member id
+is a property of *which reports belong together* rather than of when they arrived.
+
+The primary key identifies a row. The cluster key identifies the event. Only the second is
+stable, because rows here are derived data and the event is not.
+
+**Delivered once**, guaranteed by two unique constraints, both using `ON CONFLICT DO
+NOTHING` rather than catching `IntegrityError` — a raised violation aborts the surrounding
+transaction, which inside the worker would discard every notification queued behind it.
+No "has it already crossed the threshold?" bookkeeping exists anywhere; the idempotency key
+does that work, which is simpler and more reliable than tracking state that gets rebuilt
+from scratch anyway.
+
+**15 real Accra corridors seeded**, with subscriptions arranged so several commuters follow
+the roads where the two verified incidents sit — otherwise the feature would demonstrate an
+empty list.
+
+### Verified
+
+| Check | Result |
+|---|---|
+| Full suite | **282 passed, 8 skipped** |
+| Migration 0006 → 0007 SQL valid | pass |
+| 29 documented API paths | pass |
+| Advisory threshold below dispatch, above one report | pass |
+| Message contains no raw numbers or internal identifiers | pass |
+| Notifications key on cluster key, not incident id | pass |
+| LINESTRING WKT puts longitude first | pass |
+| Every seeded corridor point inside Ghana | pass |
+| Seeded subscriptions will actually produce notifications | pass |
+
+Explainer written: `08-corridors-and-commuter-advisory.md`.
+
+### Unresolved
+
+1. **Migration 0007 not applied** — `alembic upgrade head`, then reseed with `--reset` so
+   corridors and subscriptions exist.
+2. **Nothing tells a commuter when a road clears.** A system that reports blockages and
+   never reports clearances trains people to ignore it. Recorded in D-030 as a gap.
+3. No quiet hours, no direction of travel — everyone following a road hears, including
+   someone 15 km away going the other way.
+4. Keep-warm ping still not configured.
+
+### Next actions, in order
+
+1. `alembic upgrade head`, `python -m scripts.seed_demo --reset`, `pytest`, commit, push
+2. C — circuit breaker
+3. B22 — the web page: map, report form, dispatch queue, notifications
+
+---
+
+## 13 August 2026 — Session 13: consent for recordings, superseding D-028
+
+### What happened
+
+**A design decision was challenged in review and did not survive.** The author asked why
+other users should be denied a recording that would help them judge an incident. The
+answer was that the original reasoning was wrong in two ways.
+
+**It conflated two different privacy concerns.** NFR-4 protects the *reported party* — the
+person being accused. D-028 applied it to the *reporter*. Those are different, and the
+second does not follow from the first: a flood on Spintex Road accuses nobody, so there
+was no reported party and the justification did not apply at all.
+
+**It discarded most of the value of capturing voice.** "Tipper truck across two lanes,
+backed up to Odorna" tells a commuter far more than *accident, confidence 0.88*.
+
+The concern is real but **narrow** — it bites on accusatory reports, where a speaker may
+be recognised by the person they accused, and not on flooding. No single rule fits both,
+and the reporter is the only person who knows which case they are in.
+
+**So they are asked.** `is_public` on each attachment, default off, set at upload and
+changeable at any time through `PATCH /attachments/{id}/visibility`. Only the reporter may
+change it — not even an officer, because consent somebody else can give on your behalf is
+not consent, and consent that cannot be withdrawn is not a choice. The control room can
+always play a recording regardless, since a warden being sent somewhere should hear why.
+
+The listing endpoint filters with the same rule that guards the bytes, so an unshared
+recording is **invisible rather than merely unplayable** — listing something and then
+refusing it announces that it exists.
+
+Recorded as **D-029**. D-028 is marked superseded and **kept unedited**: a decision log
+that quietly deletes its mistakes is not a record of anything.
+
+**Transcription was reclassified.** It had been a nice-to-have in the backlog. It is now
+the **top item in the evolution plan**, because it is the actual resolution to this
+tension rather than a feature — publish the text, restrict the audio, and no reporter has
+to choose between helping and staying anonymous. The current design only *manages* that
+trade-off.
+
+**NFR-4a added to the SRS.** NFR-4 covers the accused; NFR-4a covers the accuser. The two
+were conflated once, so they are now written down separately.
+
+### Verified
+
+| Check | Result |
+|---|---|
+| Full suite | **255 passed, 8 skipped** |
+| Sharing defaults to off | pass |
+| Shared recording plays for signed-out visitors | pass |
+| Unshared recording silent to other commuters and to anonymous callers | pass |
+| Owner can always play their own | pass |
+| Officer, warden and admin can play anything | pass |
+| Consent is per attachment, not per user | pass |
+| Migration 0005 → 0006 SQL valid, existing rows default private | pass |
+
+Existing attachments default to private on migration: they were uploaded with no
+opportunity to consent, and retroactively publishing them would be precisely what the
+column exists to prevent.
+
+### Unresolved
+
+1. **Migrations 0005 and 0006 not yet applied** — `alembic upgrade head` before pushing.
+2. Seed data contains no attachments, so neither the evidence bonus nor sharing is
+   visible in the demonstration.
+3. Keep-warm ping still not configured.
+
+### Next actions, in order
+
+1. `pip install -r requirements.txt`, `alembic upgrade head`, `pytest`, commit, push
+2. B — corridor subscriptions and commuter advisory
+3. C — circuit breaker
+4. B22 — the web page
+
+---
+
+## 13 August 2026 — Session 12: F voice notes, and a real bug found by property testing
+
+### What happened
+
+**F — voice notes.** NFR-3 said the driver-facing view must never ask anyone to type
+while driving. Until now that was **a constraint with no answer** — the SRS said what the
+system would not do without saying how a driver reports anything at all. Hold a button,
+speak, release. In a viva, "how does a driver report a hazard?" was a question to concede;
+now it is one to answer.
+
+Attachments live in **their own table**, not as columns on `reports`. That table is
+scanned constantly by clustering, and binary data in those rows would compete with the
+query workload for buffer cache — audio nobody is playing would slow down every
+clustering pass. In a table nothing scans, it costs nothing.
+
+**Two security decisions worth volunteering.** Uploads are served with
+`X-Content-Type-Options: nosniff` and `Content-Disposition: attachment`, because a file
+declared as audio whose bytes are HTML can otherwise be sniffed by a browser and executed
+on our origin — stored XSS. And **playback is restricted to the recorder and the control
+room**, because a voice recording identifies its speaker; it is closer to biometric data
+than to a text note, and NFR-4 exists to keep exactly that away from other users.
+Unauthorised requests return 404 rather than 403, since a 403 confirms the attachment
+exists. Recorded as **D-028**.
+
+**Evidence is tied to the advanced concept, not bolted beside it.** A report carrying a
+recording weighs 1.25× more (**D-026**) — a recording is much harder to fabricate from an
+armchair than a tapped coordinate. Capped, so it can never carry a report past the
+escalation threshold alone; corroboration remains the only route to verification. It
+multiplies reputation rather than replacing it, so a discredited account cannot buy back
+standing with audio.
+
+### The finding of the session
+
+**A clustering property test failed on code that had passed, been reviewed and been
+deployed for five sessions.**
+
+```
+assert min(lons) <= centroid_longitude <= max(lons)
+AssertionError: assert -0.11988551688412255 <= -0.11988551688412256
+```
+
+Three **identical** longitudes, whose mean came out one unit in the last place *below* the
+minimum input. Nothing overflowed — the exact mean is simply not representable in binary
+floating point, and the nearest representable value sits outside the range of its own
+inputs.
+
+Physically femtometres. As an invariant, false — and a cluster centroid escaping its own
+bounding box is exactly the sort of thing that violates a database constraint two years
+later in a stack trace nobody can explain.
+
+**No example-based test would have found it.** It needs several identical coordinates with
+an unlucky bit pattern, which nobody writes by hand.
+
+Fixed with `math.fsum` plus a clamp, so the invariant holds by construction rather than by
+luck (**D-027**). Verified at 1000 generated examples and pinned with a regression test
+using the exact failing value.
+
+**This is the concrete answer to "what did property-based testing actually buy you".**
+
+### Verified
+
+| Check | Result |
+|---|---|
+| Full suite | **245 passed, 8 skipped** |
+| Centroid property at 1000 examples | pass |
+| Order independence at 1000 examples | pass |
+| Content-type allow-list rejects html, js, svg, octet-stream | pass |
+| Browser codec parameters (`audio/webm;codecs=opus`) accepted | pass |
+| Size cap at the exact boundary | pass |
+| Evidence bonus cannot breach the single-report ceiling | pass |
+| Existing confidence tests unaffected by the new parameter | pass |
+
+New dependency: `python-multipart` — FastAPI raises at import without it when file
+uploads are declared.
+
+New debt: **TD-19** media in the database rather than object storage, the item that fails
+first under real adoption; **TD-20** client-declared audio duration is unverified, which
+is acceptable only while nothing makes decisions from it.
+
+Explainer written: `07-voice-notes-and-evidence.md`.
+
+### Unresolved
+
+1. **Migration 0005 not yet applied** — `alembic upgrade head` before pushing.
+2. No playback UI; the endpoint exists, the player arrives with the page at B22.
+3. Seed data contains no attachments, so the evidence bonus is not visible in the demo.
+4. Keep-warm ping still not configured.
+
+### Next actions, in order
+
+1. `pip install -r requirements.txt`, `alembic upgrade head`, `pytest`, commit, push
+2. B — corridor subscriptions and commuter advisory
+3. C — circuit breaker
+4. B22 — the web page, at which point the map, the form and the player become visible
+
+---
+
+## 13 August 2026 — Session 11: B08 lifecycle, dispatch and the reputation loop
+
+### What happened
+
+**B08 — the officer workflow.** The dispatch queue now has something to do with the two
+verified incidents the seed produces.
+
+`app/lifecycle.py` holds every legal transition in **one table**. Anything absent is
+impossible by construction rather than by remembering to check — the alternative is
+conditional checks in each handler, which is how the third handler someone adds becomes
+the one that forgets. The same table drives the interface through `allowed_actions`, so a
+button that would be refused is never offered, and a property test asserts the two agree
+for every combination of state, action and role. Recorded as **D-024**.
+
+The distinction the module exists to enforce: **computed states** (reported,
+corroborated, verified) come from confidence and move both ways; **decided states**
+(assigned, resolved) come from a person and arithmetic never touches them. That is what
+stops a decaying score un-assigning a warden already standing at the junction.
+
+Two policy constraints worth defending: an unverified incident **cannot** be assigned, or
+the escalation threshold is decoration; and an incident nobody was sent to **cannot** be
+resolved, or the queue can be cleared by wishful thinking.
+
+**The reputation loop is closed.** Until now reputation was seeded and never moved.
+Resolving an incident now vindicates or contradicts every reporter, which is why
+resolution records an *outcome* (migration 0004) and not just a time. Both directions are
+required — if incidents could only be confirmed, fabricating would cost nothing.
+
+Formula is a Beta posterior, `(confirmed + 2) / (confirmed + contradicted + 4)`, recorded
+as **D-025**. A plain success ratio would give 1.0 after one confirmed report — file one
+true report, become fully trusted, then fabricate. The prior closes that: one
+confirmation moves a new account 0.50 → 0.60, and 0.9 takes roughly eighteen. Trust is
+deliberately lost faster than gained (5 confirmations = 0.778; 3 false alarms after that
+= 0.583) so fabricating is not profitable in expectation. Reputation can never reach 0,
+because a reporter at zero could never recover — every report would carry zero weight, so
+none could ever be confirmed.
+
+### A vacuous test caught for the second time
+
+`tests/test_routing.py` guards against a literal path being shadowed by an earlier
+parameterised one — `/incidents/queue` swallowed by `/incidents/{incident_id}` would
+return 422 with nothing failing at startup.
+
+The first version of its route traversal **found 5 routes out of 21**. FastAPI 0.141 does
+not put included routes on `app.routes`; it inserts an `_IncludedRouter` wrapper holding
+the original router. Every check passed over an almost-empty collection.
+
+Same failure as the clustering generator in Session 7, and the same remedy: a meta-test
+(`test_the_traversal_finds_the_real_routes`) that asserts the traversal finds at least 15
+routes. **This is now a recurring pattern worth naming — when a test asserts something
+about a collection, assert the collection is non-empty first.**
+
+The actual ordering turned out to be safe: the literal paths have two segments so a
+single-segment parameter cannot match them, and `/queue` is registered first.
+
+### Verified
+
+| Check | Result |
+|---|---|
+| Full suite | **211 passed, 8 skipped** |
+| All 19 API paths registered and documented | pass |
+| Migration 0003 → 0004 SQL valid | pass |
+| Commuter offered no actions in any state | pass |
+| Warden cannot self-assign | pass |
+| Unverified incident cannot be assigned | pass |
+| Unassigned incident cannot be resolved | pass |
+| `allowed_actions` agrees with the guard for all combinations | pass |
+| Reputation bounded, monotonic, never 0 or 1 | pass |
+
+Explainer written: `06-lifecycle-and-reputation.md`.
+
+### Unresolved
+
+1. **Migration 0004 not yet applied** — `alembic upgrade head` before pushing.
+2. Keep-warm ping still not configured.
+3. No audit trail of who assigned or resolved what — only current state is kept.
+4. Wardens are not notified of assignment; the outbox could carry it, sink is log-only.
+
+### Next actions, in order
+
+1. `alembic upgrade head`, `pytest`, commit, push
+2. F — voice notes, the answer to NFR-3
+3. B — corridor subscriptions and commuter advisory
+4. E — photo evidence; C — circuit breaker
+
+---
+
 ## 13 August 2026 — Session 10: integration verified, D seed data
 
 ### What happened

@@ -22,7 +22,9 @@ from fastapi.staticfiles import StaticFiles
 from app.config import get_settings
 from app.db import dispose_engine, get_sessionmaker
 from app.routers import admin as admin_router
+from app.routers import attachments as attachments_router
 from app.routers import auth as auth_router
+from app.routers import corridors as corridors_router
 from app.routers import health
 from app.routers import incidents as incidents_router
 from app.routers import reports as reports_router
@@ -88,6 +90,8 @@ def create_app() -> FastAPI:
     app.include_router(auth_router.router)
     app.include_router(reports_router.router)
     app.include_router(incidents_router.router)
+    app.include_router(attachments_router.router)
+    app.include_router(corridors_router.router)
     app.include_router(admin_router.router)
 
     # One static page, served by FastAPI. There is no separate front-end host —
