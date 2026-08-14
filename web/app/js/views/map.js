@@ -29,9 +29,16 @@ export default function mapView(mount) {
   mount.innerHTML = `
     <div id="map" role="img" aria-label="Map of current incidents in Greater Accra"></div>
     ${open ? `
-      <div class="mapchip">
-        <span class="t" id="count"></span>
-        <span class="m">Tap a marker to see what is blocking the road</span>
+      <div class="hero">
+        <div class="hero__eyebrow"><i class="hero__live"></i> Greater Accra \u00b7 live</div>
+        <h1>Know the traffic situation before you leave</h1>
+        <p>Accidents, floods and closures, reported by the people sitting in them \u2014
+           and checked against each other before you are warned.</p>
+        <div class="hero__count" id="count"></div>
+        <div class="hero__cta">
+          <a class="btn btn--onmap" href="#/register">Create an account</a>
+          <a class="btn btn--onmap" href="#/signin">Sign in</a>
+        </div>
       </div>
       <div class="maplegend">
         ${legend("verified", "verified")}
@@ -90,7 +97,11 @@ export default function mapView(mount) {
         center: ACCRA,
         zoom: 10.6,
       });
-      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+      // Signed out the zoom control moves to the bottom, because the top of the map is
+      // under the hero's scrim — a dark gradient over a white control is unreadable, and
+      // the hero passes taps through, so it would be usable and invisible at once.
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }),
+                     open ? "bottom-right" : "top-right");
       map.on("error", () => {/* a missing tile must not take the view down */});
     } catch {
       degrade(el);
@@ -122,10 +133,21 @@ export default function mapView(mount) {
 
   function render(incidents) {
     const count = mount.querySelector("#count");
-    if (count) {
-      count.textContent = open
-        ? `${incidents.length} incident${incidents.length === 1 ? "" : "s"} in Greater Accra`
-        : (incidents.length ? `${incidents.length} shown` : "");
+    if (count && open) {
+      /* The headline's claim, evidenced immediately underneath it by real data.
+       *
+       * A marketing banner over a live map that says nothing the map does not already
+       * say is decoration. This is the one number a visitor came for, and it is the same
+       * number the markers add up to — so the hero is part of the interface rather than
+       * a poster stuck on the front of it. */
+      const verified = incidents.filter(i => i.status === "verified").length;
+      count.innerHTML = incidents.length
+        ? `<span><b>${incidents.length}</b> on the road right now</span>
+           ${verified ? `<span class="tag tag--verified">${verified} verified</span>` : ""}`
+        : `<span>Nothing reported right now \u2014 the roads are clear,
+             or nobody has said otherwise yet.</span>`;
+    } else if (count) {
+      count.textContent = incidents.length ? `${incidents.length} shown` : "";
     }
     drawPins(incidents);
 

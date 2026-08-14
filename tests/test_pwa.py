@@ -645,6 +645,68 @@ def test_the_signed_out_map_has_no_list_beneath_it() -> None:
     assert "const open = !auth.signedIn" in JS["map.js"]
 
 
+def test_the_hero_does_not_capture_taps_meant_for_the_map() -> None:
+    """The difference between a banner and a lid.
+
+    Without `pointer-events:none` the headline is an invisible sheet across the top of
+    the map: markers under it cannot be tapped and the map cannot be dragged from there,
+    which on a phone is most of the screen. The words float; the buttons take their taps
+    back explicitly.
+    """
+    hero = re.search(r"\.hero \{([^}]*)\}", CSS).group(1).replace(" ", "")
+    assert "pointer-events:none" in hero
+    cta = re.search(r"\.hero__cta > \* \{([^}]*)\}", CSS).group(1).replace(" ", "")
+    assert "pointer-events:auto" in cta, "the buttons would be unclickable"
+
+
+def test_the_hero_reads_over_the_map_in_both_themes() -> None:
+    """A map is not a background colour — it is light in daylight tiles and dark at
+    night, and the text has to survive both. A gradient scrim, opaque where the words are
+    and gone before it reaches the markers."""
+    hero = re.search(r"\.hero \{([^}]*)\}", CSS).group(1)
+    assert "linear-gradient" in hero
+    assert "color:#fff" in hero.replace(" ", "")
+
+
+def test_the_hero_states_something_the_map_does_not_already_say() -> None:
+    """A banner over a live map that repeats the map is decoration. This one carries the
+    live count, so the headline's claim is evidenced immediately under it."""
+    map_js = JS["map.js"]
+    assert 'id="count"' in map_js
+    assert 'i.status === "verified"' in map_js, "the hero should show what is confirmed"
+    assert "hero__count" in CSS
+
+
+def test_the_hero_is_given_room_on_a_desktop_rather_than_left_as_the_phone_layout() -> None:
+    """Desktop is not the phone stretched wide. The hero stays centred — a headline pinned
+    left on a 1920px screen leaves the middle of the map, where the markers are, under
+    nothing — but the measure and the fade both need more distance."""
+    block = re.search(r"@media \(min-width:900px\) \{\s*\.hero \{(.*?)\n  \}", CSS, re.S)
+    assert block, "the hero has no desktop treatment"
+    assert ".hero h1" in block.group(0) and ".hero p" in block.group(0)
+
+
+def test_the_zoom_control_moves_out_from_under_the_scrim() -> None:
+    """A white control under a dark gradient is unreadable — and because the hero passes
+    taps through, it would be usable and invisible at the same time."""
+    assert 'open ? "bottom-right" : "top-right"' in JS["map.js"]
+
+
+def test_a_desktop_side_panel_does_not_blank_what_it_describes() -> None:
+    """A side panel exists so the context stays visible. Dimming the whole window behind
+    a 420px card hides the map the card is about."""
+    desktop = re.search(r"@media \(min-width:900px\)\{(.*?)\n  \}", CSS, re.S).group(1)
+    assert ".scrim{background:" in desktop.replace(" ", ""), "the full-strength dim survives"
+    faint = re.search(r"\.scrim\{background:rgba\([\d,.]*?([\d.]+)\)\}", desktop.replace(" ", ""))
+    assert faint and float(faint.group(1)) < 0.2, "the desktop dim is still a blackout"
+
+
+def test_the_appbar_joins_the_hero_rather_than_sitting_on_it() -> None:
+    """White with a hairline border it read as a bar pasted over the banner — two
+    surfaces meeting at a line where the design has one."""
+    assert re.search(r"#app\.signedOut \.appbar\s*\{[^}]*border-bottom:0", CSS)
+
+
 def test_the_teaser_answers_before_it_asks() -> None:
     """What is blocking the road comes first and costs nothing. Only then does it say
     what an account adds."""

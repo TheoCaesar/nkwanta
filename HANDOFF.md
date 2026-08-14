@@ -9,6 +9,129 @@ what comes next.
 
 ---
 
+## 14 August 2026 — Session 23: a race in five tests, not in the system
+
+### What happened
+
+The full suite against the real database: **1 failed, 487 passed**.
+`test_a_later_report_merges_into_the_existing_incident` — `IndexError`, no incident for a
+report that had just been submitted and drained.
+
+The system was behaving exactly as designed. The test was not.
+
+`drain_once()` returning zero was being read as *"the work is done"*. It means *"there was
+nothing left for me to claim"* — which is also what it returns when another worker claimed
+the row a millisecond earlier and has not committed yet. One database is shared by the
+local run, any local `uvicorn` and the deployed instance (**TD-18**), and every one of them
+runs a worker against the same table. `FOR UPDATE SKIP LOCKED` makes the second worker skip
+rather than block; that is the pattern working, and the test misread it as completion.
+
+**Five tests shared the flaw and only one had surfaced.** All five now go through
+`_settle()`, which drains and then waits for the reports to be projected — bounded at
+twenty seconds, failing with a message that distinguishes "the worker never ran" from
+"projection ran and produced nothing".
+
+The lesson, written into TD-18: **a test for an eventually-consistent system must assert
+eventually.** Written as though the pipeline were synchronous, it is a test of timing
+rather than of behaviour, and it passes until the day the system is genuinely in use.
+
+This is the second time TD-18 has produced a false failure. Both are now recorded under it
+with their mechanisms, which is what the register is for — debt whose cost is demonstrated
+twice is no longer a theoretical entry.
+
+### Then it failed again, differently — and my fix was half a fix
+
+Second run: the same test, but now the report was *never projected in 20 seconds* rather
+than read too early. The eventual-assertion was right; the twenty seconds was a guess, and
+a bad one.
+
+The queue is drained oldest-first in batches of `BATCH_SIZE = 20`. The test immediately
+before this one reseeds seventeen reports, so seventeen outbox rows sit ahead of the new
+one, and each projection is several spatial queries against a database on the other side of
+the internet — this file takes over three minutes to run for exactly that reason. A new row
+waiting behind that backlog is a queue working. A test that gives up first is measuring the
+network.
+
+Timeout raised to ninety seconds. **And the failure message now diagnoses instead of
+speculating**: it reads the outbox row and reports which of three things happened — no row
+was ever written (the transaction failed at the one job it exists for), the row is pending
+behind a stated backlog, or it was attempted and failed with `last_error` and an attempt
+count, including whether it has passed `MAX_ATTEMPTS` and will never be retried.
+
+That last part matters and I had not covered it: `drain_once` filters on
+`attempts < MAX_ATTEMPTS`, so a row that fails five times is skipped forever. A test timing
+out is indistinguishable from a poison message until something looks.
+
+**The backlog explanation is a hypothesis, not a finding.** I have no access to that
+database. If it is right, running the test alone will pass while running the file will
+have failed. If it is wrong, the new message will say so in one line instead of costing
+another round trip.
+
+### Also
+
+The earlier `seed_demo --reset` failure was not a code fault: `WinError 121 / 1231`, the
+Neon host unreachable from the laptop. It succeeded on retry.
+
+---
+
+## 14 August 2026 — Session 22: the design document
+
+### What happened
+
+Wrote `docs/09-system-design.md`, which did not exist. **System Analysis and Design is 6
+marks and there was nothing at all under it** — no architecture diagram, no data model, no
+UML, despite the paper naming UML explicitly. Design reasoning existed, scattered across
+1,100 lines of decision log and nine explainers, but scattered reasoning is not a design
+document.
+
+Thirteen sections, nine Mermaid diagrams: layered architecture with the dependency rule,
+the full ER model, four sequence diagrams (report intake, grouping and scoring, dispatch
+and the reputation feedback loop, advisory fan-out), the lifecycle state machine, the
+privacy decision tree, and a deployment view. Plus traceability from design element to
+requirement to test, and a table of what is knowingly imperfect pointing into the debt
+register.
+
+### Two corrections to my own reporting
+
+**I had been repeating "nothing pushed since session 14" for several turns.** It came from
+this file and I never checked it. It was false — commits have been going in throughout.
+What is actually true, checked: three commits unpushed on `dev`, and `origin/main` nineteen
+behind. If the submitted repository URL resolves to the default branch, an examiner is
+reading a repo that predates the entire PWA.
+
+The lesson is the same one as the service worker and `.t`/`.m`, in a third form: **a claim
+carried forward without being re-checked is not evidence, however many times it is
+repeated.** A handoff note is a snapshot, not a fact.
+
+**`Deployment_and_Source_Links.txt` claims a keep-warm ping runs every ten minutes.** It
+does not — that was never configured. A false statement in a submission document is worse
+than the cold start it was written to excuse. Either set it up or delete the sentence.
+
+### Verification
+
+`tests/test_design_docs.py` — 23 tests, and they check the document against the code rather
+than against itself: every module and service the diagrams name exists on disk, every table
+in the ER diagram is in `Base.metadata` **and every table in the metadata is in the
+diagram**, the thresholds and clustering constants quoted match the constants, and every
+D-, TD-, NFR- and test file it cites resolves to something real. A dangling citation is a
+confident statement that happens to be false, which is worse than no statement.
+
+Mermaid syntax cannot be checked from Python, so `scripts/validate-diagrams.mjs` does it
+with the real parser. It earned its place immediately: one sequence diagram would have
+rendered as a grey error box because a note contained a semicolon, which mermaid reads as
+a statement separator. Nothing in pytest could have seen that.
+
+**478 passing**, up from 455.
+
+### What is left
+
+Documents, in descending order of marks at risk: SRS (7), Testing Report (5), User Manual
+(3), Maintenance and Future Evolution (3), and the consolidated Project Documentation (3).
+Then the PDF pass. Also outstanding: push `dev` and merge to `main`, reseed for
+attachments, the keep-warm claim, no clearance integration test, and the old page at `/`.
+
+---
+
 ## 14 August 2026 — Session 21: the signed-out map, built as designed
 
 ### What happened
@@ -71,6 +194,63 @@ reaching for a field it must not have is one schema change from showing it.
 Also ran a rendering smoke check outside pytest: both branches of the map template
 evaluated with stubs and parsed for balance. `node --check` proves the JavaScript is
 valid, which is not the same as the HTML being closed.
+
+### The map got a banner
+
+Feedback on the built version: the signed-out map was correct and bland — a map with a
+count on it, saying nothing. It now carries a hero over the map, in the manner of the
+reference sites: eyebrow, headline, one sentence, the live figure, two buttons.
+
+Three things about it are engineering rather than decoration.
+
+**`pointer-events:none` on the hero, `auto` on the buttons.** This is the difference
+between a banner and a lid. Without it the headline is an invisible sheet across the top
+of the map — markers under it cannot be tapped and the map cannot be dragged from there,
+which on a phone is most of the screen. The words float; the buttons take their taps back
+explicitly. Tested.
+
+**The scrim is a gradient, not a panel.** The thing behind it is a live map, light in
+daylight tiles and dark at night. A flat tint dark enough for white text over Accra at
+night is far darker than it needs to be at midday. The gradient is opaque where the words
+are and gone before it reaches the markers.
+
+**The hero says something the map does not already say.** It carries the live count and
+how many are verified, so the headline's claim is evidenced immediately beneath it. A
+banner over a live map that repeats the map is a poster stuck on the front of the
+interface; this one is part of it.
+
+The appbar also takes the darkest stop of the scrim when signed out. White with its
+hairline border, it read as a bar pasted over the banner — two surfaces meeting at a line
+where the design has one.
+
+**452 passing.** Four new: the hero cannot capture taps meant for the map, it reads over
+both themes, it states live data, and the appbar joins rather than sits on it.
+
+### Desktop got the same treatment, and three things it needed that the phone did not
+
+The hero stays **centred** on a wide screen rather than being pinned left. Left-aligning it
+would leave the middle of the map — where the markers are — under nothing, and both
+reference sites centre the same block at both sizes. What changes is room: the measure
+grows by about two words a line and the scrim fades over a longer distance, so it has
+cleared the markers well before they begin.
+
+**The zoom control moved to the bottom when signed out.** It sat top-right, under the
+scrim. A white control beneath a dark gradient is unreadable — and because the hero passes
+taps through, it would have been usable and invisible at the same time, which is worse
+than being either.
+
+**The desktop side panel no longer blanks the map.** `sheet()` already became a 420px
+right-hand panel above 900px, but the backdrop stayed at 45% across the whole window. A
+side panel exists so the thing it describes stays visible; dimming everything behind it
+hides the map the panel is about. Dropped to 14% — faint enough to see through, still
+present as the click-outside target and as a hint about which layer is being addressed.
+That one is not signed-out-specific: it improves every sheet on a desktop.
+
+**455 passing.** Three more: the hero has a desktop treatment rather than being the phone
+layout stretched, the zoom control leaves the scrim, and the desktop dim is not a blackout.
+
+`ui-designs.html` §3 updated to match on both screens, so the deliverable and the build do
+not diverge.
 
 ### What is unresolved
 

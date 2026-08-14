@@ -123,8 +123,18 @@ nkwanta/
     ├── 02-problem-and-scope.md    <- problem, users, what's in, what's out, backlog
     ├── 03-glossary.md             <- every technical term in plain English
     ├── 04-advanced-concept.md     <- the advanced concept, explained simply
-    └── 05-decision-log.md         <- dated record of every significant choice
+    ├── 05-decision-log.md         <- dated record of every significant choice
+    ├── 06-effort-estimation.md    <- Use Case Points and bottom-up, and the cuts forced
+    ├── 07-build-schedule.md       <- the plan against the clock, with cut triggers
+    ├── 08-technical-debt.md       <- live register, written as shortcuts are taken
+    ├── 09-system-design.md        <- architecture, ER, sequences, lifecycle, deployment
+    ├── design/ui-designs.html     <- UI/UX specification, a submission deliverable
+    └── explainers/               <- one per module, for the viva
 ```
+
+**Mermaid diagrams in `09-system-design.md` are validated outside pytest**, with a small
+node script — they need a JavaScript parser. A semicolon inside a `sequenceDiagram` note
+silently breaks rendering, which is how one was caught. Re-validate after editing them.
 
 Code has not been written yet. When it is, it goes in `src/` (backend) and `web/`
 (frontend) inside this same folder.

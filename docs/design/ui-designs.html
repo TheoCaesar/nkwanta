@@ -226,56 +226,78 @@ impression than showing one room. The map fills the screen and the only control 
   <div>
     <div class="phone"><div class="screen">
       <div style="padding:9px 10px;display:flex;justify-content:space-between;align-items:center;
-                      background:#fff;border-bottom:1px solid var(--hair);flex:none;z-index:2">
-            <div style="font-size:12.5px;font-weight:600;color:var(--ink);letter-spacing:-.01em">Nkwanta</div>
+                      background:#08100D;flex:none;z-index:2">
+            <div style="font-size:12.5px;font-weight:600;color:#fff;letter-spacing:-.01em">Nkwanta</div>
             <div style="display:flex;gap:5px;align-items:center">
-              <span style="font-size:9px;color:var(--green);border:1px solid var(--green);
+              <span style="font-size:9px;color:#fff;background:var(--green);
                            border-radius:11px;padding:3px 9px;font-weight:500">Sign in</span>
             </div>
           </div>
       <div style="flex:1;position:relative;min-height:0">
         <svg viewBox="0 0 200 200" preserveAspectRatio="xMidYMid slice" style="width:100%;height:100%;display:block">
-            <rect width="200" height="200" fill="#E8EEEA"/>
-            <path d="M-5 62 L205 76" stroke="#CBD6CF" stroke-width="9" fill="none"/>
-            <path d="M74 -5 L90 205" stroke="#CBD6CF" stroke-width="9" fill="none"/>
-            <path d="M-5 146 L205 134" stroke="#D8E0DA" stroke-width="6" fill="none"/>
-            <path d="M-5 178 L205 190" stroke="#D8E0DA" stroke-width="5" fill="none"/>
-            <path d="M150 -5 L160 205" stroke="#D8E0DA" stroke-width="5" fill="none"/>
-            <path d="M20 205 L60 60 L200 30" stroke="#DFE7E1" stroke-width="4" fill="none"/>
-            <circle cx="82" cy="70" r="20" fill="#C2453D" opacity=".13"/><circle cx="82" cy="70" r="8.5" fill="#C2453D" stroke="#fff" stroke-width="2"/>
-            <circle cx="156" cy="140" r="15" fill="#D9A406" opacity=".16"/><circle cx="156" cy="140" r="6.5" fill="#D9A406" stroke="#fff" stroke-width="2"/>
-            <circle cx="34" cy="120" r="11" fill="#8A968F" opacity=".18"/><circle cx="34" cy="120" r="5" fill="#8A968F" stroke="#fff" stroke-width="1.6"/>
-            <circle cx="120" cy="184" r="13" fill="#185FA5" opacity=".16"/><circle cx="120" cy="184" r="6" fill="#185FA5" stroke="#fff" stroke-width="1.8"/>
-            <circle cx="176" cy="52" r="11" fill="#8A968F" opacity=".18"/><circle cx="176" cy="52" r="5" fill="#8A968F" stroke="#fff" stroke-width="1.6"/>
-          </svg>
-        <div style="position:absolute;left:8px;right:8px;bottom:8px;background:#fff;
-                    border-radius:9px;padding:7px 9px;box-shadow:0 1px 6px rgba(0,0,0,.1)">
-          <div style="font-size:10px;font-weight:600;color:var(--ink)">5 incidents in Greater Accra</div>
-          <div style="font-size:8.5px;color:var(--muted);margin-top:1px">Tap a marker to see what is blocking the road</div>
+          <rect width="200" height="200" fill="#E8EEEA"/>
+          <path d="M-5 62 L205 76" stroke="#CBD6CF" stroke-width="9" fill="none"/>
+          <path d="M74 -5 L90 205" stroke="#CBD6CF" stroke-width="9" fill="none"/>
+          <path d="M-5 146 L205 134" stroke="#D8E0DA" stroke-width="6" fill="none"/>
+          <path d="M-5 178 L205 190" stroke="#D8E0DA" stroke-width="5" fill="none"/>
+          <path d="M150 -5 L160 205" stroke="#D8E0DA" stroke-width="5" fill="none"/>
+          <circle cx="82" cy="150" r="18" fill="#C2453D" opacity=".13"/><circle cx="82" cy="150" r="8" fill="#C2453D" stroke="#fff" stroke-width="2"/>
+          <circle cx="156" cy="176" r="14" fill="#D9A406" opacity=".16"/><circle cx="156" cy="176" r="6.5" fill="#D9A406" stroke="#fff" stroke-width="2"/>
+          <circle cx="34" cy="186" r="10" fill="#8A968F" opacity=".18"/><circle cx="34" cy="186" r="5" fill="#8A968F" stroke="#fff" stroke-width="1.6"/>
+          <circle cx="120" cy="120" r="12" fill="#185FA5" opacity=".16"/><circle cx="120" cy="120" r="5.5" fill="#185FA5" stroke="#fff" stroke-width="1.8"/>
+        </svg>
+
+        <div style="position:absolute;left:0;right:0;top:0;padding:16px 13px 40px;text-align:center;
+                    background:linear-gradient(to bottom,rgba(8,16,13,.86) 0%,rgba(8,16,13,.74) 42%,
+                    rgba(8,16,13,.42) 72%,rgba(8,16,13,0) 100%)">
+          <div style="font-size:7.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
+                      color:#7FD4B4;display:flex;align-items:center;justify-content:center;gap:4px">
+            <i style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#37C08A"></i>
+            Greater Accra · live
+          </div>
+          <div style="font-size:19px;line-height:1.12;font-weight:600;color:#fff;
+                      letter-spacing:-.022em;margin:7px auto 0;max-width:9.5em">Know the traffic situation before you leave</div>
+          <div style="font-size:8.5px;line-height:1.5;color:rgba(255,255,255,.76);margin:7px auto 0;max-width:23em">
+            Accidents, floods and closures, reported by the people sitting in them — and checked
+            against each other before you are warned.
+          </div>
+          <div style="margin-top:11px;color:#fff;font-size:8.5px;display:flex;align-items:center;
+                      justify-content:center;gap:5px">
+            <b style="font-size:14px">5</b> on the road right now
+            <span class="tag t-red" style="font-size:6.5px">1 verified</span>
+          </div>
+          <div style="margin-top:11px;display:flex;gap:5px;justify-content:center">
+            <span style="font-size:8.5px;color:#fff;background:rgba(255,255,255,.13);
+                         border:1px solid rgba(255,255,255,.34);border-radius:11px;padding:4px 10px">Create an account</span>
+            <span style="font-size:8.5px;color:#fff;background:rgba(255,255,255,.13);
+                         border:1px solid rgba(255,255,255,.34);border-radius:11px;padding:4px 10px">Sign in</span>
+          </div>
         </div>
-        <div style="position:absolute;left:8px;top:8px;background:rgba(255,255,255,.94);
-                    border-radius:7px;padding:5px 7px;display:flex;gap:7px;font-size:7.5px;color:var(--muted)">
+
+        <div style="position:absolute;left:8px;bottom:8px;background:rgba(255,255,255,.94);
+                    border-radius:6px;padding:5px 7px;display:flex;gap:7px;font-size:7.5px;color:var(--muted)">
           <span><i style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#C2453D"></i> verified</span>
           <span><i style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#D9A406"></i> corroborated</span>
           <span><i style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#8A968F"></i> unconfirmed</span>
         </div>
       </div>
     </div></div>
-    <div class="cap"><b>Home, signed out.</b> No sidebar, no tab bar — the map is the page.
-      Colour follows status and size follows it too, in three steps. <em>Amended during the
-      build:</em> this originally said size follows accuracy, which the gate on this same
-      page makes impossible — the score is withheld, so there is nothing to size by. The
-      three statuses are that score banded at 0.35 and 0.70, so the grammar survives at a
-      coarser grain. One control, and it is the one that matters.</div>
+    <div class="cap"><b>Home, signed out.</b> No sidebar, no tab bar — the map <em>is</em> the
+      page, and the banner sits over it rather than beside it. The appbar takes the darkest
+      stop of the scrim so the two read as one surface. The words do not take taps: markers
+      under the headline stay tappable and the map still drags. <em>Amended during the
+      build:</em> pin size originally followed accuracy, which the gate on this same page
+      makes impossible — the score is withheld, so there is nothing to size by. The three
+      statuses are that score banded at 0.35 and 0.70.</div>
   </div>
 
   <div>
     <div class="phone"><div class="screen">
       <div style="padding:9px 10px;display:flex;justify-content:space-between;align-items:center;
-                      background:#fff;border-bottom:1px solid var(--hair);flex:none;z-index:2">
-            <div style="font-size:12.5px;font-weight:600;color:var(--ink);letter-spacing:-.01em">Nkwanta</div>
+                      background:#08100D;flex:none;z-index:2">
+            <div style="font-size:12.5px;font-weight:600;color:#fff;letter-spacing:-.01em">Nkwanta</div>
             <div style="display:flex;gap:5px;align-items:center">
-              <span style="font-size:9px;color:var(--green);border:1px solid var(--green);
+              <span style="font-size:9px;color:#fff;background:var(--green);
                            border-radius:11px;padding:3px 9px;font-weight:500">Sign in</span>
             </div>
           </div>
@@ -449,43 +471,78 @@ impression than showing one room. The map fills the screen and the only control 
 <h3>Desktop, signed out</h3>
 
 <div class="desk" style="max-width:640px;margin:.6rem auto 0">
-  <div class="deskin" style="grid-template-columns:1fr;min-height:250px">
+  <div class="deskin" style="grid-template-columns:1fr;min-height:300px">
     <div style="display:flex;flex-direction:column">
-      <div style="background:#fff;border-bottom:1px solid var(--hair);padding:9px 14px;
-                  display:flex;justify-content:space-between;align-items:center">
-        <div style="font-size:12px;font-weight:600;color:var(--ink)">Nkwanta</div>
-        <div style="display:flex;gap:6px;align-items:center">
-          <span style="font-size:9.5px;color:var(--muted)">Greater Accra · live</span>
-          <span style="font-size:9.5px;color:#fff;background:var(--green);border-radius:11px;
-                       padding:4px 12px;font-weight:500">Sign in</span>
-        </div>
+      <div style="background:#08100D;padding:9px 14px;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:12px;font-weight:600;color:#fff">Nkwanta</div>
+        <span style="font-size:9.5px;color:#fff;background:var(--green);border-radius:11px;
+                     padding:4px 12px;font-weight:500">Sign in</span>
       </div>
-      <div style="flex:1;position:relative;min-height:200px;overflow:hidden">
-        <svg viewBox="0 0 400 200" preserveAspectRatio="xMidYMid slice" style="width:100%;height:100%;display:block">
-          <rect width="400" height="200" fill="#E8EEEA"/>
-          <path d="M-5 70 L405 84" stroke="#CBD6CF" stroke-width="8" fill="none"/>
-          <path d="M150 -5 L168 205" stroke="#CBD6CF" stroke-width="8" fill="none"/>
-          <path d="M-5 150 L405 140" stroke="#D8E0DA" stroke-width="5" fill="none"/>
-          <path d="M290 -5 L300 205" stroke="#D8E0DA" stroke-width="5" fill="none"/>
-          <circle cx="160" cy="78" r="19" fill="#C2453D" opacity=".13"/><circle cx="160" cy="78" r="8" fill="#C2453D" stroke="#fff" stroke-width="2"/>
-          <circle cx="296" cy="146" r="14" fill="#D9A406" opacity=".16"/><circle cx="296" cy="146" r="6" fill="#D9A406" stroke="#fff" stroke-width="2"/>
-          <circle cx="64" cy="126" r="10" fill="#8A968F" opacity=".18"/><circle cx="64" cy="126" r="4.5" fill="#8A968F" stroke="#fff" stroke-width="1.5"/>
-          <circle cx="238" cy="188" r="12" fill="#185FA5" opacity=".16"/><circle cx="238" cy="188" r="5.5" fill="#185FA5" stroke="#fff" stroke-width="1.7"/>
+      <div style="flex:1;position:relative;min-height:260px;overflow:hidden">
+        <svg viewBox="0 0 400 260" preserveAspectRatio="xMidYMid slice" style="width:100%;height:100%;display:block">
+          <rect width="400" height="260" fill="#E8EEEA"/>
+          <path d="M-5 96 L405 112" stroke="#CBD6CF" stroke-width="8" fill="none"/>
+          <path d="M150 -5 L168 265" stroke="#CBD6CF" stroke-width="8" fill="none"/>
+          <path d="M-5 196 L405 186" stroke="#D8E0DA" stroke-width="5" fill="none"/>
+          <path d="M290 -5 L300 265" stroke="#D8E0DA" stroke-width="5" fill="none"/>
+          <circle cx="160" cy="196" r="18" fill="#C2453D" opacity=".13"/><circle cx="160" cy="196" r="8" fill="#C2453D" stroke="#fff" stroke-width="2"/>
+          <circle cx="296" cy="216" r="14" fill="#D9A406" opacity=".16"/><circle cx="296" cy="216" r="6" fill="#D9A406" stroke="#fff" stroke-width="2"/>
+          <circle cx="64" cy="206" r="10" fill="#8A968F" opacity=".18"/><circle cx="64" cy="206" r="4.5" fill="#8A968F" stroke="#fff" stroke-width="1.5"/>
+          <circle cx="228" cy="150" r="12" fill="#185FA5" opacity=".16"/><circle cx="228" cy="150" r="5.5" fill="#185FA5" stroke="#fff" stroke-width="1.7"/>
         </svg>
-        <div style="position:absolute;right:12px;top:12px;width:180px;background:#fff;border-radius:8px;
-                    box-shadow:0 1px 8px rgba(0,0,0,.11);padding:9px 10px">
+
+        <div style="position:absolute;left:0;right:0;top:0;padding:22px 20px 54px;text-align:center;
+                    background:linear-gradient(to bottom,rgba(8,16,13,.86) 0%,rgba(8,16,13,.74) 42%,
+                    rgba(8,16,13,.42) 72%,rgba(8,16,13,0) 100%)">
+          <div style="font-size:7px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
+                      color:#7FD4B4;display:flex;align-items:center;justify-content:center;gap:4px">
+            <i style="display:inline-block;width:4px;height:4px;border-radius:50%;background:#37C08A"></i>
+            Greater Accra · live
+          </div>
+          <div style="font-size:22px;line-height:1.12;font-weight:600;color:#fff;
+                      letter-spacing:-.022em;margin:8px auto 0;max-width:12em">Know the traffic situation before you leave</div>
+          <div style="font-size:9px;line-height:1.5;color:rgba(255,255,255,.76);margin:8px auto 0;max-width:34em">
+            Accidents, floods and closures, reported by the people sitting in them — and checked
+            against each other before you are warned.
+          </div>
+          <div style="margin-top:12px;color:#fff;font-size:9px;display:flex;align-items:center;
+                      justify-content:center;gap:6px">
+            <b style="font-size:15px">5</b> on the road right now
+            <span class="tag t-red" style="font-size:7px">1 verified</span>
+          </div>
+          <div style="margin-top:12px;display:flex;gap:6px;justify-content:center">
+            <span style="font-size:9px;color:#fff;background:rgba(255,255,255,.13);
+                         border:1px solid rgba(255,255,255,.34);border-radius:11px;padding:5px 16px">Create an account</span>
+            <span style="font-size:9px;color:#fff;background:rgba(255,255,255,.13);
+                         border:1px solid rgba(255,255,255,.34);border-radius:11px;padding:5px 16px">Sign in</span>
+          </div>
+        </div>
+
+        <div style="position:absolute;right:12px;top:74px;bottom:12px;width:170px;background:#fff;
+                    border-radius:10px;box-shadow:0 8px 26px rgba(0,0,0,.22);padding:11px 12px">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:5px">
-            <div style="font-size:11.5px;font-weight:600;color:var(--ink)">Accident</div>
+            <div style="font-size:12px;font-weight:600;color:var(--ink)">Accident</div>
             <span class="tag t-red">VERIFIED</span>
           </div>
-          <div style="font-size:9px;color:var(--muted);margin-top:2px">Kwame Nkrumah Circle · 4 min ago</div>
-          <div style="height:1px;background:var(--hair);margin:8px 0"></div>
-          <div style="display:flex;align-items:center;gap:5px;color:var(--faint)">
-            <svg class="ico-sm"><use href="#i-lock"/></svg>
-            <span style="font-size:8.5px">6 reports, photographs and accuracy</span>
+          <div style="font-size:9px;color:var(--muted);margin-top:2px">Last reported 4 minutes ago</div>
+          <div style="background:var(--grey-100);border-radius:6px;padding:9px;margin-top:11px">
+            <div style="display:flex;align-items:center;gap:4px;color:var(--faint);margin-bottom:6px">
+              <svg class="ico-sm"><use href="#i-lock"/></svg>
+              <span style="font-size:7px;letter-spacing:.06em;font-weight:600;text-transform:uppercase">Needs an account</span>
+            </div>
+            <div style="font-size:8.5px;color:var(--muted);line-height:1.8">
+              <div>Who reported it</div><div>Photographs and recordings</div><div>How accurate this is</div>
+            </div>
           </div>
           <div style="background:var(--green);color:#fff;border-radius:6px;text-align:center;
-                      padding:6px;font-size:9.5px;font-weight:500;margin-top:8px">Sign in to see</div>
+                      padding:7px;font-size:9.5px;font-weight:500;margin-top:10px">Sign in to see the detail</div>
+        </div>
+
+        <div style="position:absolute;left:12px;bottom:12px;background:rgba(255,255,255,.94);
+                    border-radius:6px;padding:5px 7px;display:flex;gap:7px;font-size:7.5px;color:var(--muted)">
+          <span><i style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#C2453D"></i> verified</span>
+          <span><i style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#D9A406"></i> corroborated</span>
+          <span><i style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#8A968F"></i> unconfirmed</span>
         </div>
       </div>
     </div>
@@ -493,8 +550,19 @@ impression than showing one room. The map fills the screen and the only control 
 </div>
 <div class="cap" style="max-width:640px;margin:.5rem auto 0"><b>Desktop, signed out.</b> The
   sidebar is absent rather than disabled — a console with every item greyed out advertises a
-  product the visitor cannot use. The detail arrives as a panel over the map instead of a
-  sheet, because a mouse has a cursor and does not need the thumb zone.</div>
+  product the visitor cannot use. The same hero, centred: a headline pinned to the left of a
+  1920px screen would leave the middle of the map, where the markers are, under nothing. The
+  detail arrives as a panel beside the map rather than a sheet over it, and the window behind
+  is barely dimmed — a side panel exists so the thing it describes stays visible.</div>
+
+<div class="note">
+  <b>One rule carries both layouts.</b> The banner does not take taps
+  (<code>pointer-events:none</code>, with the buttons claiming theirs back). Without it the
+  headline is an invisible sheet across the top of the map: markers under it cannot be
+  tapped and the map cannot be dragged from there — most of a phone screen, and the whole
+  centre of a desktop one. The zoom control moves to the bottom on this screen for the same
+  reason: it would otherwise sit under the scrim, usable and unreadable at once.
+</div>
 
 <h3>What this costs, honestly</h3>
 

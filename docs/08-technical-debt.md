@@ -290,6 +290,31 @@ of *what must be true*. But it only became wrong once the application was genuin
 running, which is the clearest demonstration of this debt item's cost so far. With a
 separate development database the queue would have been the test's own.
 
+**Observed again, 14 August 2026 — and the second time is the interesting one.**
+`test_a_later_report_merges_into_the_existing_incident` failed with `IndexError`: after
+draining, no incident existed for a report that had just been submitted.
+
+The cause was the same debt and a different mechanism. `drain_once()` returning zero was
+being read as *"the work is done"*. It does not mean that. It means *"there was nothing
+left for me to claim"* — which is also exactly what it returns when another worker claimed
+the row a millisecond earlier and has not committed yet. `FOR UPDATE SKIP LOCKED` is
+designed to make the second worker skip rather than block, so this is the pattern working
+correctly and the test misreading it.
+
+Five tests shared the flaw; only one had surfaced. All five now go through a `_settle()`
+helper that drains and then **waits for the reports to appear**, bounded at twenty seconds
+and failing with a message that distinguishes "the worker never ran" from "projection ran
+and produced nothing".
+
+The general lesson, and it is not about this project: **a test for an eventually-consistent
+system must assert eventually.** Writing it as though the pipeline were synchronous makes
+it a test of timing rather than of behaviour, and it will pass until the day the system is
+actually in use — which is the day it is least convenient to discover.
+
+The first occurrence cost one test. This one cost a green run at hour forty-something with
+a submission pending. The cost of this debt item is now demonstrated twice, and it remains
+a decision about setup time rather than money: a second Neon project is free.
+
 ---
 
 ## TD-23 — Demonstration cleanup deletes real data belonging to demo accounts

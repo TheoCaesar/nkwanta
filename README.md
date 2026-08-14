@@ -42,6 +42,8 @@ section, then [`CLAUDE.md`](CLAUDE.md).
 | [`docs/06-effort-estimation.md`](docs/06-effort-estimation.md) | Use Case Points and bottom-up estimate, and the cuts they forced |
 | [`docs/07-build-schedule.md`](docs/07-build-schedule.md) | Hour-by-hour plan for the remaining clock, with cut triggers |
 | [`docs/08-technical-debt.md`](docs/08-technical-debt.md) | Live debt register — every shortcut, its cause and its repayment |
+| [`docs/09-system-design.md`](docs/09-system-design.md) | Architecture, data model, sequences, lifecycle, deployment — with UML |
+| [`docs/design/ui-designs.html`](docs/design/ui-designs.html) | UI/UX specification — every screen, every role, signed out and in |
 | [`RUNBOOK.md`](RUNBOOK.md) | Run it locally, then deploy it. Written to be executed. |
 
 ### Explainers — one per module, written to be defended aloud

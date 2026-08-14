@@ -137,7 +137,6 @@
   /* Report is an ordinary tab, not a raised pill. It is one destination among five and
      styling it as a floating action made it read as a different kind of control — and
      put it out of line with everything else on desktop. */
-  .tabbar a.fab { color:var(--green) }
   .tabbar a[aria-current="page"], .tabbar a.fab[aria-current="page"] {
     background:var(--green-100);
   }
@@ -147,6 +146,17 @@
    * border, which leaves a stripe of nothing along the bottom of a phone and a blank
    * 216px column down the side of a desktop. */
   #app.signedOut .tabbar { display:none }
+
+  /* Signed out, the appbar is the top of the hero rather than a separate strip.
+   *
+   * Left white with its hairline border it read as a bar pasted over the banner — two
+   * surfaces meeting at a line, where the design has one. It takes the darkest stop of
+   * the scrim gradient, so the join is invisible without the appbar having to leave the
+   * document flow and overlap the map. */
+  #app.signedOut .appbar {
+    background:#08100D; border-bottom:0; color:#fff;
+  }
+  #app.signedOut .appbar h1 { color:#fff }
 
   .tabbar .badge {
     position:absolute; transform:translate(12px,-6px); background:var(--red); color:#fff;
@@ -260,15 +270,80 @@
    * Both float over the map rather than taking a row of their own. Screen space on a
    * phone is the scarcest thing here, and the map is the content — chrome that pushes it
    * smaller to describe it is chrome that has misunderstood its job. */
-  .mapchip {
-    position:absolute; left:var(--s3); right:var(--s3); bottom:calc(var(--s3) + env(safe-area-inset-bottom));
-    background:var(--card); border-radius:var(--r-md); padding:var(--s3);
-    box-shadow:var(--lift-1); z-index:2; pointer-events:none;
+  /* The hero, over a live map.
+   *
+   * `pointer-events:none` on the container and `auto` on the two buttons is the whole
+   * trick, and it is the difference between a banner and a lid. Without it the headline
+   * is an invisible sheet across the top half of the map: markers under it cannot be
+   * tapped and the map cannot be dragged from there, which on a phone is most of the
+   * screen. The words float; the map underneath stays live.
+   *
+   * The scrim is a gradient rather than a flat panel because the map beneath is real and
+   * changes — a flat tint dark enough for white text over Accra at night is far darker
+   * than it needs to be at midday. The gradient is opaque where the words are and gone
+   * by the time it reaches the markers.
+   */
+  .hero {
+    position:absolute; inset:0 0 auto; z-index:3; pointer-events:none;
+    padding:var(--s5) var(--s4) var(--s7);
+    background:linear-gradient(to bottom,
+      rgba(8,16,13,.86) 0%, rgba(8,16,13,.74) 42%, rgba(8,16,13,.42) 72%, rgba(8,16,13,0) 100%);
+    color:#fff; text-align:center;
   }
+  .hero__eyebrow {
+    font-size:11px; font-weight:600; letter-spacing:.09em; text-transform:uppercase;
+    color:#7FD4B4; display:flex; align-items:center; justify-content:center; gap:6px;
+  }
+  .hero__live {
+    width:7px; height:7px; border-radius:50%; background:#37C08A;
+    box-shadow:0 0 0 0 rgba(55,192,138,.7); animation:pulse 2.4s var(--ease) infinite;
+  }
+  @keyframes pulse {
+    70% { box-shadow:0 0 0 7px rgba(55,192,138,0) }
+    100% { box-shadow:0 0 0 0 rgba(55,192,138,0) }
+  }
+  .hero h1 {
+    font-size:clamp(23px, 6.4vw, 40px); line-height:1.12; font-weight:600;
+    letter-spacing:-.022em; margin:var(--s3) auto 0; max-width:16ch; color:#fff;
+  }
+  .hero p {
+    font-size:14px; line-height:1.5; color:rgba(255,255,255,.76);
+    margin:var(--s3) auto 0; max-width:34ch;
+  }
+  .hero__count {
+    margin-top:var(--s4); font-size:13px; color:rgba(255,255,255,.92);
+    display:inline-flex; align-items:center; gap:var(--s2); flex-wrap:wrap;
+    justify-content:center;
+  }
+  .hero__count b { font-size:19px; font-weight:600; font-variant-numeric:tabular-nums }
+  .hero__cta { margin-top:var(--s4); display:flex; gap:var(--s2); justify-content:center; flex-wrap:wrap }
+  .hero__cta > * { pointer-events:auto }
+  .hero .btn--onmap {
+    background:rgba(255,255,255,.13); color:#fff; border:1px solid rgba(255,255,255,.34);
+    backdrop-filter:blur(6px); border-radius: 70px;
+  }
+  .hero .btn--onmap:hover:not(:disabled) { background:rgba(255,255,255,.22); filter:none }
+
+  /* Desktop is not the phone stretched wide, but the hero is the one place it nearly is:
+     the reference sites centre the same block on both, and a headline pinned left on a
+     1920px screen leaves the map's centre — where the markers are — under nothing.
+     What changes is room: the scrim fades over a longer distance so it has cleared the
+     markers well before they start, and the measure grows by about two words a line. */
+  @media (min-width:900px) {
+    .hero { padding:var(--s7) var(--s5) 96px }
+    .hero h1 { max-width:20ch }
+    .hero p { font-size:15.5px; max-width:46ch }
+    .hero__count { margin-top:var(--s5) }
+    .hero__cta { margin-top:var(--s5) }
+    .hero .btn--onmap { padding:11px var(--s5) }
+  }
+
+  /* The legend sits under the hero's fade, bottom-left, where it does not compete with
+     the headline and does not cover the markers it explains. */
   .maplegend {
-    position:absolute; left:var(--s3); top:var(--s3); z-index:2;
-    background:color-mix(in srgb, var(--card) 92%, transparent);
-    border-radius:var(--r-sm); padding:6px var(--s2);
+    position:absolute; left:var(--s3); bottom:calc(var(--s3) + env(safe-area-inset-bottom));
+    z-index:2; background:color-mix(in srgb, var(--card) 92%, transparent);
+    border-radius:var(--r-sm); padding:6px var(--s2); box-shadow:var(--lift-1);
     display:flex; gap:var(--s3); font-size:10px; color:var(--muted); pointer-events:none;
   }
 
@@ -397,6 +472,12 @@
     .sheet{left:auto;right:var(--s5);bottom:var(--s5);top:var(--s5);width:420px;
            border-radius:var(--r-lg);max-height:none;transform:translateX(120%)}
     .sheet[data-open]{transform:translateX(0)}
+    /* A side panel exists so the context stays visible. Dimming the whole window behind
+       a 420px card blanks the map the card is describing, which is the opposite of the
+       intent recorded above it. Kept faint rather than removed — it is still the
+       click-outside-to-close target, and a slight recession still says which layer is
+       being addressed. */
+    .scrim{background:rgba(13,21,18,.14)}
   }
 
   /* Skeletons match the final layout, so nothing jumps when data lands. */

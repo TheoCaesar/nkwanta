@@ -38,11 +38,13 @@ application was actually running.
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
+import time
 import uuid
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import get_settings
@@ -59,7 +61,7 @@ from app.models import (
 from app.schemas import ReportCreate
 from app.security import hash_password
 from app.services.reports import submit_report
-from app.worker import OutboxWorker
+from app.worker import MAX_ATTEMPTS, OutboxWorker
 
 pytestmark = pytest.mark.skipif(
     not get_settings().database_configured,
@@ -143,6 +145,91 @@ async def _submit(db, reporter: User, lat: float, lon: float, minutes_ago: int =
         return result.report
 
 
+async def _projected(db, report_ids: list[uuid.UUID]) -> set[uuid.UUID]:
+    """Which of these reports have made it into an incident yet."""
+    async with db() as session:
+        return set(
+            await session.scalars(
+                select(IncidentReport.report_id).where(
+                    IncidentReport.report_id.in_(report_ids)
+                )
+            )
+        )
+
+
+async def _outbox_diagnosis(db, report_ids: list[uuid.UUID]) -> str:
+    """Why the reports were not projected — read from the queue rather than guessed.
+
+    A timeout message that says "it did not happen" sends the next person back to the
+    database by hand. This says which of the three things went wrong: the row was never
+    written, it is waiting behind a backlog, or it was tried and failed with a reason.
+    """
+    async with db() as session:
+        rows = list(
+            await session.scalars(
+                select(OutboxMessage).where(OutboxMessage.aggregate_id.in_(report_ids))
+            )
+        )
+        backlog = await session.scalar(
+            select(func.count())
+            .select_from(OutboxMessage)
+            .where(OutboxMessage.processed_at.is_(None))
+        )
+
+    if not rows:
+        return ("no outbox row exists for these reports at all — the write and the enqueue "
+                "came apart, which is the one thing the transaction is there to prevent")
+
+    parts = [f"{backlog} unprocessed rows in the queue overall"]
+    for row in rows:
+        state = "processed" if row.processed_at else "PENDING"
+        parts.append(
+            f"row {str(row.id)[:8]}: {state}, attempts={row.attempts}"
+            + (f", last_error={row.last_error!r}" if row.last_error else "")
+            + (f", exhausted (>= {MAX_ATTEMPTS} attempts, the worker will never retry it)"
+               if row.attempts >= MAX_ATTEMPTS else "")
+        )
+    return "; ".join(parts)
+
+
+async def _settle(db, report_ids: list[uuid.UUID], timeout: float = 90.0) -> list[Incident]:
+    """Drain, then wait until every one of these reports has been projected.
+
+    **The tests here cannot assume that draining in this process is what does the work.**
+    One database is shared by the local run, any local `uvicorn` and the deployed instance
+    (TD-18), and each runs an outbox worker against the same table. `drain_once()`
+    returning zero means "nothing left for *me* to claim", which is also what it returns
+    when another worker claimed the row a millisecond ago and has not committed. The
+    guarantee is eventual, so the assertion has to be eventual.
+
+    **The timeout is generous on purpose, and the first version was not.** It was set to
+    twenty seconds by guessing, and twenty seconds is nothing here: the queue is drained
+    oldest-first in batches of `BATCH_SIZE`, the preceding test reseeds seventeen reports,
+    and every projection is several spatial queries against a database on the other side of
+    the internet. This whole file takes over three minutes to run for that reason. A new
+    row waits behind that backlog by design — it is a queue — and a test that gives up
+    first is measuring the network, not the system.
+
+    Ninety seconds is far longer than the work needs on any healthy connection, and a
+    genuine failure still fails. When it does, it says why: see `_outbox_diagnosis`.
+    """
+    worker = OutboxWorker(db, get_settings())
+    wanted = set(report_ids)
+    deadline = time.monotonic() + timeout
+
+    while True:
+        await worker.drain_once()
+        projected = await _projected(db, report_ids)
+        if wanted <= projected:
+            return await _incidents_for(db, report_ids)
+        if time.monotonic() >= deadline:
+            raise AssertionError(
+                f"{len(wanted - projected)} of {len(wanted)} reports were not projected "
+                f"within {timeout:.0f}s.\n  " + await _outbox_diagnosis(db, report_ids)
+            )
+        await asyncio.sleep(0.5)
+
+
 async def _incidents_for(db, report_ids: list[uuid.UUID]) -> list[Incident]:
     async with db() as session:
         incident_ids = set(
@@ -208,13 +295,7 @@ async def test_submitting_a_report_writes_an_outbox_row_in_the_same_transaction(
 async def test_three_nearby_reports_become_one_incident(db, reporter) -> None:
     """The whole pipeline, for real: three reports at Circle, one incident out."""
     reports = [await _submit(db, reporter, lat, lon) for lat, lon in CIRCLE]
-
-    worker = OutboxWorker(db, get_settings())
-    for _ in range(4):                 # one pass per report, plus slack
-        if await worker.drain_once() == 0:
-            break
-
-    incidents = await _incidents_for(db, [r.id for r in reports])
+    incidents = await _settle(db, [r.id for r in reports])
 
     assert len(incidents) == 1, f"expected one incident, got {len(incidents)}"
     incident = incidents[0]
@@ -231,12 +312,7 @@ async def test_a_distant_report_forms_its_own_incident(db, reporter) -> None:
     near = await _submit(db, reporter, *CIRCLE[0])
     far = await _submit(db, reporter, *ACHIMOTA)
 
-    worker = OutboxWorker(db, get_settings())
-    for _ in range(3):
-        if await worker.drain_once() == 0:
-            break
-
-    incidents = await _incidents_for(db, [near.id, far.id])
+    incidents = await _settle(db, [near.id, far.id])
     assert len(incidents) == 2
 
 
@@ -249,10 +325,7 @@ async def test_coordinates_survive_the_round_trip(db, reporter) -> None:
 
     report = await _submit(db, reporter, *CIRCLE[0])
 
-    worker = OutboxWorker(db, get_settings())
-    await worker.drain_once()
-
-    incidents = await _incidents_for(db, [report.id])
+    incidents = await _settle(db, [report.id])
     assert len(incidents) == 1
 
     point = to_shape(incidents[0].centroid)
@@ -289,13 +362,8 @@ async def test_draining_twice_does_not_duplicate_incidents(db, reporter) -> None
     """Idempotence end to end. A restart mid-batch must not double-count."""
     reports = [await _submit(db, reporter, lat, lon) for lat, lon in CIRCLE[:2]]
 
-    worker = OutboxWorker(db, get_settings())
-    for _ in range(3):
-        if await worker.drain_once() == 0:
-            break
-
-    first = await _incidents_for(db, [r.id for r in reports])
-    await worker.drain_once()
+    first = await _settle(db, [r.id for r in reports])
+    await OutboxWorker(db, get_settings()).drain_once()
     second = await _incidents_for(db, [r.id for r in reports])
 
     assert len(first) == len(second) == 1
@@ -376,14 +444,10 @@ async def test_a_later_report_merges_into_the_existing_incident(db, reporter) ->
     """The case incremental assignment cannot handle: an incident must grow when a new
     report arrives near it, not spawn a second one beside it."""
     first = await _submit(db, reporter, *CIRCLE[0])
-
-    worker = OutboxWorker(db, get_settings())
-    await worker.drain_once()
-    assert (await _incidents_for(db, [first.id]))[0].report_count == 1
+    assert (await _settle(db, [first.id]))[0].report_count == 1
 
     second = await _submit(db, reporter, *CIRCLE[1])
-    await worker.drain_once()
+    incidents = await _settle(db, [first.id, second.id])
 
-    incidents = await _incidents_for(db, [first.id, second.id])
-    assert len(incidents) == 1
+    assert len(incidents) == 1, "the second report spawned its own incident"
     assert incidents[0].report_count == 2
