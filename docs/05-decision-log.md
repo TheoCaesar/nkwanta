@@ -9,6 +9,323 @@ Format: what was decided, what else was considered, why, and what it costs.
 
 ---
 
+## 14 August 2026 — retiring the first interface
+
+### D-045 — The application takes the root; the original page is retired
+
+**Decided:** `/` serves the progressive web application. `/app` becomes a permanent
+redirect to it. The original single page is removed from the routing table. The manifest's
+`id`, `start_url` and `scope` all become `/`, and the service worker is registered from
+`/sw.js` with scope `/`.
+
+**Considered:** leaving both running, which is the status quo; and moving the application
+to `/` while keeping the old page at `/legacy`.
+
+**Why:** The old page existed for one reason, recorded at the time — a graded deployment
+should never be one bad commit from having nothing to show. That was right while the
+rebuild was unproven. It is proven, and a second interface now costs more than it insures:
+it is a second thing an examiner might land on, and it is tested, maintained and shipped
+for no remaining purpose.
+
+**Moving to the root was not tidiness. It fixed two silent faults**, both found while
+making this change rather than by anything failing:
+
+1. **The installed application would have opened a 404.** The manifest's `start_url` and
+   `scope` were `/static/app/`, which was never a route — the static mount serves files,
+   not directory indexes. `GET /static/app/` returns 404 today. It was also listed in the
+   worker's shell files, where `cache.add` failed on it at every install; the
+   `Promise.allSettled` that tolerates a missing file is why nobody noticed.
+
+2. **The service worker controlled nothing.** It was registered as `/static/app/sw.js`
+   with scope `/static/app/`, while the page it registered from was at `/app` — outside
+   that scope. A worker only controls clients within its scope, so it installed
+   successfully, cached the shell, and was never consulted. **Offline has never worked in
+   production, and no test could see it**, because every test asserted the worker's
+   *contents* rather than its reach.
+
+Both faults are the same shape: a scope may not sit above the file that declares it, and
+three separate places — the route, the manifest and the registration — had to agree on one
+address. At the root they agree by construction and there is nothing left to keep in step.
+That is the real argument for the move.
+
+**Costs.** The fallback is gone: a bad commit now takes the whole front end, where before
+one interface survived. Mitigated by the redirect, by 472 tests, and by the fact that the
+insurance was only ever worth having while the replacement was unproven. `web/index.html`
+and its tests remain in the repository until removed with `git rm`; nothing routes to
+either.
+
+---
+
+## 14 August 2026 — the signed-out map
+
+### D-044 — A signed-out visitor sees the road, not the people
+
+**Decided:** No sidebar and no tab bar when signed out. The map fills the screen and the
+only control is *Sign in*. Tapping a marker gives the incident **type**, its **status**
+and **how long ago** it was last reported — then a lock listing what an account adds.
+Reporter names, credibility, photographs, recordings and the numeric accuracy score all
+require signing in.
+
+**Considered:** leaving details open and only fixing the navigation, which reverses
+nothing; markers with no meaning at all until you sign in, which is the strongest push to
+register; and disabling the sidebar items rather than removing them.
+
+**Why:** Two separate problems, and they have the same answer.
+
+The navigation was showing four destinations that would refuse the visitor and one that
+would not. A console with every item greyed out advertises a product somebody cannot use;
+removing it entirely makes the map the page, which is what it should have been.
+
+The gating narrows the promise in `02-problem-and-scope.md` — that a commuter checking the
+road ahead should not need an account — and the narrowing is deliberate rather than
+accidental. **What is blocking the road, where, and how recently is kept.** That was the
+promise. What now needs an account is everything about the *people*: who reported it, what
+they photographed or recorded, and the score built from their credibility. Those were
+never part of the commuter's promise. They are the working material of the control room,
+and every one of them identifies a reporter — which is what NFR-4a exists to prevent, and
+what D-029 and D-042 already govern for evidence specifically.
+
+The accuracy score is gated for a reason worth stating separately: **it cannot be
+separated from the people who produced it.** It is a function of who reported the incident
+and how reliable each has been. Publishing it beside a marker publishes a summary of their
+credibility to anyone with the link. The status tag carries the same judgement at a
+coarser grain — *corroborated* means several people independently, *verified* means enough
+that the police have been told — so a commuter gets the conclusion without the working.
+
+Disabling rather than removing the sidebar was rejected on the same grounds as the
+would-be-refused buttons in `dispatch.js`: an action that would be refused should not
+be offered.
+
+**Costs.** A commuter who wants to know *how sure* the system is must now sign in, and
+55% versus 88% is exactly the kind of thing that decides whether somebody leaves early.
+That is the real case against this. If the trade proves wrong, the cheapest reversal is to
+show the score but never the reporters — it is one field on a response that is already
+public — and this entry exists partly to keep that option visible.
+
+Designed before being built: `docs/design/ui-designs.html` §3.
+
+---
+
+## 14 August 2026 — serving the evidence
+
+### D-043 — Attachment URLs are signed and short-lived
+
+**Decided:** When the API returns an attachment to a caller `may_play` has already
+cleared, it appends a signed token to the URL: `/attachments/{id}?t=…`. The token names
+one attachment, expires in ten minutes, and carries an audience claim so it can never be
+used as a login token or vice versa. The `Authorization` header route still works and is
+still checked first.
+
+**Considered:** fetching the bytes in JavaScript with the bearer token and turning them
+into an object URL; a session cookie alongside the header; and making every attachment
+public, which would have made the problem disappear by deleting the requirement.
+
+**Why:** This fixes a bug that made a whole feature unusable, and the cause is worth
+stating precisely. **`<img src>` and `<audio src>` cannot send a header.** The browser
+issues those requests itself and there is no hook to add one. Every other request in this
+system proves who is asking with `Authorization: Bearer …`, so a private attachment was
+in practice invisible to *everybody* — including the person who had just uploaded it, who
+could see it listed and could not open it. Pasting the URL into the address bar failed the
+same way, which is exactly what it looked like from the outside: a blank image and a bare
+`{"detail":"No such attachment."}`.
+
+The object-URL alternative works and needs no new signing code, but it cannot be linked,
+cannot be opened in a new tab, holds the whole file in memory, and defeats range requests
+so a recording cannot be scrubbed. The cookie brings CSRF back into a system that
+currently has none by construction.
+
+This is the mechanism behind an S3 presigned URL, and for the same reason: check the
+entitlement once, where the caller is known, then carry it in the URL to a place where
+they are not.
+
+**Costs.** Anyone holding the URL can load the file until it expires — the token is a
+capability, not an identity. Mitigated by the ten-minute life and by scoping it to one
+attachment, and accepted on the grounds that anyone who can read the URL could have been
+handed the bytes anyway. It also means the URL is not stable, so it cannot be cached by
+the service worker or bookmarked. Both are correct for private evidence.
+
+---
+
+### D-042 — A photograph is shared by default; a recording is not
+
+**Decided:** `POST /reports/{id}/photo` defaults `share_publicly` to **true**;
+`POST /reports/{id}/voice` keeps its default of **false**. Either can be withdrawn
+afterwards through the same endpoint.
+
+**Considered:** both private, which is what shipped and was wrong; both public, which
+throws away D-029; and asking for a photograph with the same checkbox as a recording.
+
+**Why:** D-029 established consent for recordings, and the reasoning there was specific
+even though the implementation was not. **A recording carries the reporter's voice.**
+Sharing it exposes the person making the accusation, which is precisely what NFR-4a
+exists to prevent. That reasoning does not transfer to a photograph of a flooded road: it
+describes the road, not the photographer.
+
+Inheriting the private default gave the worst of both. A photograph is the single most
+useful thing you can show another commuter deciding whether to take that route, and no
+commuter ever saw one — while the actual privacy interest, the voice, was protected by a
+default nobody had thought about separately.
+
+Withdrawal still applies, because a photograph can catch a face or a number plate the
+person taking it did not notice. What changes is which way the default points, and the
+default should point at the answer most people would give.
+
+**Costs.** A reporter who did not read the label has shared a photograph they might not
+have chosen to. Mitigated by the withdrawal endpoint and by the 250 KB cap, which rules
+out anything with much incidental detail — and weighed against the cost of the previous
+default, which was a feature that silently did nothing.
+
+---
+
+## 14 August 2026 — the words and numbers the interface shows
+
+### D-041 — Evidence is opened per report, not summarised per incident
+
+**Decided:** The incident popup lists each reporter as a row that opens. Inside are the
+words they typed, the photographs they attached and a player for the recording, if it was
+shared. The row shows a one-line summary — "note · 2 photos · voice" — so a reader knows
+whether opening it is worth the tap. A row with nothing behind it is disabled rather than
+hidden.
+
+**Considered:** pooling all evidence for the incident into one gallery, which is what most
+incident tools do; and leaving evidence out of the commuter view entirely, as it was.
+
+**Why:** The pooled gallery loses the link between a claim and who made it. This system's
+whole argument is that a claim inherits its weight from the person making it — so a
+photograph detached from its reporter is exactly the wrong abstraction. An officer
+deciding whether to send a warden needs to know that the photograph came from the reporter
+with 91% credibility, not merely that a photograph exists.
+
+The disabled row is deliberate. Hiding rows with no evidence would make the list of
+reporters shorter than the report count, which is confusing; showing them greyed says
+"this person reported it and sent nothing else", which is true and worth knowing.
+
+**Costs.** One request returns more rows than before, since attachments are now joined in.
+Mitigated by batch-loading them in a single query rather than one per report, and by the
+existing caps — three photographs and one recording per report.
+
+---
+
+### D-040 — Percentages are rounded down, never to nearest
+
+**Decided:** Every score shown on screen is floored to a whole percent. 0.899 shows as
+89%, not 90%.
+
+**Considered:** rounding to nearest, which is the convention; and one decimal place, which
+avoids the question.
+
+**Why:** These numbers are not decorative. Above 70% an incident enters the dispatch queue
+and a warden may be sent to a road. When a displayed number is wrong it should be wrong in
+the direction of understating what the system knows, because the cost of overstating is a
+warden dispatched on thinner evidence than the screen implied. Rounding down also makes
+the threshold honest: nothing shows 70% until it has genuinely reached 0.70.
+
+**Costs.** A user watching a score climb sees it stall at 89% for slightly longer than
+nearest-rounding would. That is the correct direction to err.
+
+---
+
+### D-039 — "Accuracy" and "credibility" on screen; `confidence` and `reputation` in the code
+
+**Decided:** The interface says **accuracy** where the code says `confidence`, and
+**credibility** where the code says `reputation`. The database columns, API fields and
+module names are unchanged. The translation lives in one exported object, `LABEL`, and a
+test fails if any view spells out either internal word.
+
+**Considered:** renaming everything, columns included, so there is one vocabulary; and
+keeping the internal words on screen, as before.
+
+**Why:** The internal words mislead a road user. "Confidence" invites a reader to hear
+certainty, when the number means *how much independent corroboration exists* — a single
+very trusted reporter and four strangers can produce the same figure by different routes.
+"Reputation" sounds like a popularity score attached to a person, when it is a record of
+whether that person's past reports turned out to be true. Neither is what the reader
+assumes, and both are shown to people making decisions about roads.
+
+Renaming the columns was rejected on timing, not principle. A rename touching the model,
+the migrations, seven services and every test is the kind of change that goes wrong at
+hour forty of forty-eight, and it buys nothing the mapping does not.
+
+**Costs.** Two vocabularies, and a reader moving between the code and the screen has to
+carry the mapping. Mitigated by the glossary, which now records both names against one
+definition, and by the test — the mapping cannot silently rot, because a view that spells
+out "Reputation" fails the build.
+
+---
+
+## 13 August 2026 — front end and interface design
+
+### D-038 — Avatars are initials; nobody uploads a profile photograph
+
+**Decided:** Every avatar is initials on a disc, coloured deterministically from the user
+id. There is no profile photograph upload for any role.
+
+**Considered:** photographs for everyone, which is what users expect; and a staff-only
+variant where wardens and officers upload one but commuters keep initials.
+
+**Why:** A face attached to a name that already appears in an officer's evidence list
+makes a reporter easier to identify, and **NFR-4a exists precisely to prevent that** — it
+is the same requirement that defaults voice notes to private. No decision the system makes
+is improved by knowing what a reporter looks like, so it is personal data with no
+operational purpose. It would also add binary to PostgreSQL, already the debt most likely
+to fail first under adoption (TD-19), and create a moderation burden with no moderator.
+
+The staff-only variant was genuinely defensible — a warden is public-facing and
+recognition helps an officer assigning one — and was set aside as complexity for a gain
+the system does not need.
+
+**Costs.** Looks less conventional than a product with photographs. Mitigated by treating
+initials as a designed element rather than a placeholder, so the interface reads as
+finished.
+
+---
+
+### D-037 — No front-end framework; native ES modules, no build step
+
+**Decided:** The rebuilt interface uses native ES modules, plain CSS with custom
+properties, and no bundler. If reactivity becomes unwieldy, Alpine.js from a CDN — still
+no build.
+
+**Considered:** React or Vue, which is the default expectation for an interface of this
+quality.
+
+**Why:** A framework requires a build step, which means Node in the deployment pipeline —
+either a separate host, undoing D-012, or a build stage on Render. Deployment is worth 3
+marks and is pass-or-fail, and that risk buys nothing the design needs: "modern and high
+quality" is a consistent spacing scale, a restrained type scale, semantic colour tokens,
+real loading and empty states, and sparing motion. None of that is a framework feature.
+
+Native modules provide components and imports with zero tooling, and the deployed artefact
+stays exactly what it is in the repository — which also makes it easier to explain.
+
+**Costs.** More manual DOM work, and state synchronisation must be written rather than
+inherited. Acceptable at roughly eight views.
+
+---
+
+### D-036 — The front-end budget was revisited late, and that was an error
+
+**Decided:** Rebuild the interface to match the scope the API had already reached.
+
+**Why this is recorded as a mistake rather than a plan:** D-010 cut the front end to 1.2
+hours because implementation carried only 10 of 48 marks. That was correct under the
+original constraint. When the deadline extended and the observed build rate proved far
+higher than estimated (D-017), scope was revisited for the officer workflow, voice notes,
+corridors and the circuit breaker — **and the front-end budget was not revisited with
+them.** The API grew to Tier 2 while the page stayed at Tier 0.
+
+The result was an interface with no role differentiation, no profile, no photo upload
+despite a tested endpoint for it, and no validation worth the name. It was raised in
+review by the author, not noticed by me.
+
+**The lesson, stated plainly:** when a constraint that produced a decision changes, every
+decision derived from it needs revisiting, not just the ones currently being worked on.
+
+**Costs.** A full interface rebuild late in the schedule. Mitigated by building alongside
+the existing page rather than replacing it, so a working demonstration exists throughout.
+
+---
+
 ## 13 August 2026 — C circuit breaker and clearance
 
 ### D-035 — Every time-dependent module takes `now` as an argument

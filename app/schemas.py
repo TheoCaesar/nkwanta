@@ -57,6 +57,37 @@ class UserResponse(BaseModel):
     created_at: dt.datetime
 
 
+class UpdateMeRequest(BaseModel):
+    """What you may change about yourself.
+
+    **Display name only.** Email is absent because it is the login identifier and changing
+    it needs a verification message this system cannot send. Role is absent for the same
+    reason registration has no role field — an input that does not exist cannot be
+    supplied, which is stronger than a check that could be forgotten.
+    """
+
+    display_name: str = Field(min_length=2, max_length=80)
+
+
+class ChangePasswordRequest(BaseModel):
+    """The current password is required.
+
+    Without it, anyone holding an unlocked phone could lock its owner out of their own
+    account. A valid session proves possession of a device, not knowledge of a secret.
+    """
+
+    current_password: str = Field(max_length=72)
+    new_password: str = Field(min_length=8, max_length=72)
+
+
+class UpdateUserByAdmin(BaseModel):
+    """Admin-only changes to somebody else's account. Every field optional — omitted
+    means unchanged, rather than meaning null."""
+
+    is_active: bool | None = None
+    role: UserRole | None = None
+
+
 class UserCreateByAdmin(BaseModel):
     """Only an admin may call this, and it is the only way to mint a privileged
     account. Wardens, officers and other admins are created here or seeded."""
@@ -110,8 +141,12 @@ class EvidenceResponse(BaseModel):
     """One report's contribution to an incident's confidence.
 
     This is what makes the score explainable rather than merely displayed. An officer
-    can see which reporter, how reliable they have been, and how much that particular
-    report counted.
+    can see which reporter, how reliable they have been, how much that particular report
+    counted — and now what they actually said.
+
+    `attachments` is filtered by the same rule that guards the bytes: a recording appears
+    here only if its reporter shared it, or the caller is its owner or control room.
+    Listing something that cannot then be played would announce that it exists.
     """
 
     report_id: uuid.UUID
@@ -119,6 +154,8 @@ class EvidenceResponse(BaseModel):
     reporter_reputation: float
     occurred_at: dt.datetime
     weight: float
+    note: str | None = None
+    attachments: list["AttachmentResponse"] = []
 
 
 class IncidentResponse(BaseModel):
@@ -128,13 +165,28 @@ class IncidentResponse(BaseModel):
     incident_type: IncidentType
     latitude: float
     longitude: float
-    confidence: float
     status: IncidentStatus
-    report_count: int
     first_reported_at: dt.datetime
     last_reported_at: dt.datetime
     assigned_to_id: uuid.UUID | None = None
     resolved_at: dt.datetime | None = None
+
+    # Absent for a signed-out visitor — D-044.
+    #
+    # Both of these describe the *people* behind the incident rather than the road. The
+    # confidence score is a function of who reported it and how reliable each of them has
+    # been, so publishing it beside a marker publishes a summary of their credibility to
+    # anyone holding the link; the count is the size of that group.
+    #
+    # `status` stays, and carries the same judgement at a coarser grain — corroborated
+    # means several people independently, verified means enough that the police have been
+    # told. A commuter gets the conclusion without the working.
+    #
+    # `None` rather than a separate schema: one shape, one field that is sometimes absent,
+    # and a client that must handle the absence either way. Two schemas would be two
+    # places to forget.
+    confidence: float | None = None
+    report_count: int | None = None
 
 
 class IncidentDetailResponse(IncidentResponse):

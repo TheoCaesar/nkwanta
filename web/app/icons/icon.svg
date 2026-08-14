@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Nkwanta">
+  <title>Nkwanta</title>
+  <desc>A junction: two roads crossing, with a marker at the meeting point. Nkwanta is Twi for junction.</desc>
+  <rect width="512" height="512" rx="112" fill="#0F6E56"/>
+  <g stroke="#7FD8BC" stroke-width="26" stroke-linecap="round" opacity=".55">
+    <path d="M64 300 L448 268"/>
+    <path d="M212 64 L246 448"/>
+  </g>
+  <circle cx="232" cy="284" r="96" fill="#fff" opacity=".14"/>
+  <circle cx="232" cy="284" r="52" fill="#fff"/>
+  <circle cx="232" cy="284" r="22" fill="#0F6E56"/>
+</svg>

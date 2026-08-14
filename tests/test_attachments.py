@@ -12,11 +12,15 @@ them, so playback is restricted to the recorder and the control room.
 
 from __future__ import annotations
 
+import inspect
 import uuid
 
+import jwt
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
+
+from app import media_tokens
 
 from app.confidence import (
     DEFAULT_EVIDENCE_STRENGTH,
@@ -25,6 +29,8 @@ from app.confidence import (
     report_weight,
 )
 from app.models import Attachment, AttachmentKind, IncidentType, Report, User, UserRole
+from app.routers.attachments import attachment_url, fetch_attachment, upload_photo, upload_voice
+from app.security import create_access_token, decode_access_token
 from app.services.attachments import (
     ALLOWED_AUDIO,
     ALLOWED_IMAGE,
@@ -303,3 +309,120 @@ def test_score_applies_the_bonus_only_to_named_reports() -> None:
 
     weights = {e.report_id: e.weight for e in result.evidence}
     assert weights[a] > weights[b]
+
+
+# =============================================================================
+# SIGNED MEDIA URLS
+#
+# `<img src>` and `<audio src>` cannot send an Authorization header — the browser makes
+# those requests on its own. So a private attachment was, in practice, unviewable by
+# everybody, its own uploader included: listed in the interface, blank on the page, and a
+# bare {"detail":"No such attachment."} if you pasted the URL into the address bar.
+#
+# The fix is a short-lived signed token in the URL, minted where the caller is known.
+# These tests are about the ways that could go wrong.
+# =============================================================================
+
+SECRET = "a-test-secret-that-is-long-enough-to-be-plausible"
+OTHER_SECRET = "a-completely-different-secret-of-similar-length"
+
+
+def test_a_minted_token_opens_the_attachment_it_was_minted_for() -> None:
+    aid = uuid.uuid4()
+    assert media_tokens.permits(media_tokens.mint(aid, SECRET), aid, SECRET)
+
+
+def test_a_token_does_not_open_a_different_attachment() -> None:
+    """Otherwise one shared photograph would be a key to every private recording."""
+    mine, yours = uuid.uuid4(), uuid.uuid4()
+    assert not media_tokens.permits(media_tokens.mint(mine, SECRET), yours, SECRET)
+
+
+def test_a_token_signed_with_another_secret_is_refused() -> None:
+    aid = uuid.uuid4()
+    assert not media_tokens.permits(media_tokens.mint(aid, OTHER_SECRET), aid, SECRET)
+
+
+def test_an_expired_token_is_refused() -> None:
+    aid = uuid.uuid4()
+    stale = media_tokens.mint(aid, SECRET, ttl_seconds=-1)
+    assert not media_tokens.permits(stale, aid, SECRET)
+
+
+def test_the_token_expires_in_minutes_not_hours() -> None:
+    """A URL copied out of a page should be worthless by the time anyone reads it."""
+    assert 0 < media_tokens.TTL_SECONDS <= 900
+
+
+@pytest.mark.parametrize("token", [None, "", "not-a-token", "a.b.c"])
+def test_junk_is_refused_without_raising(token: str | None) -> None:
+    """A malformed token is an answer of "no", not a 500. Anything else turns a bad URL
+    into an error report from the server."""
+    assert not media_tokens.permits(token, uuid.uuid4(), SECRET)
+
+
+def test_a_login_token_cannot_be_used_as_a_media_token() -> None:
+    """Both are signed with the same secret. Without an audience claim they would be
+    interchangeable, and any session token would open any attachment."""
+    aid = uuid.uuid4()
+    login = create_access_token(str(aid), "commuter", SECRET)
+    assert not media_tokens.permits(login, aid, SECRET)
+
+
+def test_a_media_token_cannot_be_used_as_a_login_token() -> None:
+    """And the reverse, which is the more serious direction: a media URL leaks easily —
+    it appears in browser history and in a referrer — and must never become a session."""
+    aid = uuid.uuid4()
+    token = media_tokens.mint(aid, SECRET)
+    with pytest.raises(jwt.InvalidTokenError):
+        decode_access_token(token, SECRET)
+
+
+def test_the_token_does_not_name_the_viewer() -> None:
+    """It is a capability, not an identity: it grants sight of one file for ten minutes.
+    Putting the viewer in it would make an image URL a record of who looked."""
+    aid = uuid.uuid4()
+    claims = jwt.decode(
+        media_tokens.mint(aid, SECRET), SECRET,
+        algorithms=["HS256"], audience="nkwanta:media",
+    )
+    assert set(claims) == {"sub", "aud", "iat", "exp"}
+
+
+def test_a_served_url_carries_a_token_that_works() -> None:
+    """The end-to-end shape, without a database: what the API hands the browser must be
+    something the browser can actually load."""
+    a = _attachment()
+    url = attachment_url(a, SECRET)
+    assert url.startswith(f"/attachments/{a.id}?t=")
+    assert media_tokens.permits(url.split("?t=", 1)[1], a.id, SECRET)
+
+
+# =============================================================================
+# TWO DEFAULTS, DELIBERATELY DIFFERENT
+# =============================================================================
+
+
+def test_a_photograph_is_shared_by_default_and_a_recording_is_not() -> None:
+    """D-042. They are not the same kind of evidence.
+
+    A recording carries the reporter's voice, so sharing it exposes the person making the
+    accusation — the thing NFR-4a exists to prevent. A photograph of a flooded road
+    describes the road, and is the single most useful thing another commuter can be
+    shown. Defaulting it to private meant nobody ever saw one.
+    """
+    signature = inspect.signature(upload_photo)
+    assert signature.parameters["share_publicly"].default is True
+
+    voice_signature = inspect.signature(upload_voice)
+    assert voice_signature.parameters["share_publicly"].default is False
+
+
+def test_an_image_renders_in_place_and_anything_else_downloads() -> None:
+    """`inline` is safe on an image and only on an image: the type was checked against an
+    allow-list on the way in, it is echoed back rather than guessed, and `nosniff` stops
+    the browser overruling it. Audio keeps `attachment`, because its containers can hold
+    almost anything."""
+    source = inspect.getsource(fetch_attachment)
+    assert "ALLOWED_IMAGE" in source
+    assert "nosniff" in source

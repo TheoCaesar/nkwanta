@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0F6E56" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0D1512" media="(prefers-color-scheme: dark)">
+<meta name="description" content="Report what is blocking the road in Accra, and be warned about the routes you travel.">
+<title>Nkwanta</title>
+
+<link rel="manifest" href="/static/app/manifest.webmanifest">
+<link rel="icon" href="/static/app/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/app/icons/icon-180.png">
+<link rel="stylesheet" href="/static/app/css/app.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.css">
+
+<!--
+  Nkwanta — a road incident reporting and dispatch system for urban Ghana.
+
+  No framework and no build step: native ES modules, plain CSS with custom properties.
+  A bundler would mean Node in the deployment pipeline, and deployment is worth three
+  marks and is pass-or-fail. See decision D-037.
+
+  The shell below is what a service worker caches, so the application opens with no
+  connection. Everything inside #view is rendered by JavaScript.
+-->
+</head>
+<body>
+
+<div id="app">
+  <div class="main">
+    <header class="appbar">
+      <h1 id="title">Nkwanta</h1>
+      <div class="inline" id="appbar-actions"></div>
+    </header>
+
+    <div id="banners"></div>
+
+    <main id="view" class="view" role="main" aria-live="polite">
+      <div class="pad"><div class="skel" style="width:60%"></div></div>
+    </main>
+  </div>
+
+  <nav class="tabbar" id="tabs" aria-label="Main"></nav>
+</div>
+
+<noscript>
+  <div style="padding:24px;text-align:center">
+    Nkwanta needs JavaScript. The
+    <a href="/docs">interactive API documentation</a> works without it.
+  </div>
+</noscript>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.js" defer></script>
+<script type="module" src="/static/app/js/app.js"></script>
+</body>
+</html>

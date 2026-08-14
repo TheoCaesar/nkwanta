@@ -11,6 +11,8 @@ calling POST /auth/users. Both are auditable.
 
 from __future__ import annotations
 
+import logging
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -23,13 +25,18 @@ from app.config import Settings, get_settings
 from app.db import get_session
 from app.models import User, UserRole
 from app.schemas import (
+    ChangePasswordRequest,
     LoginRequest,
     RegisterRequest,
     TokenResponse,
+    UpdateMeRequest,
+    UpdateUserByAdmin,
     UserCreateByAdmin,
     UserResponse,
 )
 from app.security import PasswordTooLongError, create_access_token, hash_password, verify_password
+
+log = logging.getLogger("nkwanta.auth")
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -101,7 +108,8 @@ async def login(
     session: Annotated[AsyncSession, Depends(get_session)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> TokenResponse:
-    user = await session.scalar(select(User).where(User.email == body.email.lower()))
+    email = body.email.strip().lower()
+    user = await session.scalar(select(User).where(User.email == email))
 
     # Verify against a real hash even when the account does not exist, so that a
     # missing account and a wrong password take the same time. Skipping the hash for
@@ -110,6 +118,23 @@ async def login(
     matched = verify_password(body.password, stored)
 
     if user is None or not matched or not user.is_active:
+        # The response stays deliberately vague — telling a caller which part failed
+        # turns the login form into a tool for discovering registered addresses.
+        #
+        # Outside production, the *log* says which, because a developer debugging their
+        # own database should not have to guess. The password itself is never written
+        # anywhere; only its length, which is enough to spot an empty field or a browser
+        # autofilling something unexpected.
+        if settings.environment != "production":
+            reason = (
+                "no account with that email" if user is None
+                else "account is deactivated" if not user.is_active
+                else "password does not match"
+            )
+            log.warning(
+                "login refused for %r: %s (received %d-character password)",
+                email, reason, len(body.password),
+            )
         raise _BAD_CREDENTIALS
 
     return await _issue(user, settings)
@@ -118,6 +143,95 @@ async def login(
 @router.get("/me", response_model=UserResponse, summary="The current user")
 async def me(user: CurrentUser) -> User:
     return user
+
+
+@router.patch("/me", response_model=UserResponse, summary="Update your own details")
+async def update_me(
+    body: UpdateMeRequest,
+    user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> User:
+    """Display name only.
+
+    Email and role are not in the request schema at all. Email is the login identifier
+    and changing it needs a verification message this system cannot send; role is
+    withheld for the same reason registration withholds it — nobody promotes themselves.
+    """
+    user.display_name = body.display_name.strip()
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
+@router.post(
+    "/me/password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Change your own password",
+)
+async def change_password(
+    body: ChangePasswordRequest,
+    user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    """Requires the current password.
+
+    A valid token proves possession of a device, not knowledge of a secret. Without this
+    check, anyone holding an unlocked phone could lock its owner out of their account.
+    """
+    if not verify_password(body.current_password, user.password_hash):
+        # Deliberately vague about which is wrong, and 403 rather than 401 — the caller
+        # is authenticated, they simply failed to prove they know the password.
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "That is not your current password.")
+
+    if body.new_password == body.current_password:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "The new password must be different from the current one.",
+        )
+
+    try:
+        user.password_hash = hash_password(body.new_password)
+    except PasswordTooLongError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+
+    await session.commit()
+    # Existing tokens stay valid, which is a deliberate trade: revoking them needs a
+    # token blacklist, and the twelve-hour expiry bounds the exposure. Recorded as debt.
+
+
+@router.patch(
+    "/users/{user_id}",
+    response_model=UserResponse,
+    summary="Change someone's role or deactivate them (admin only)",
+)
+async def update_user(
+    user_id: uuid.UUID,
+    body: UpdateUserByAdmin,
+    admin: AdminOnly,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> User:
+    """Deactivation takes effect immediately, not at token expiry, because
+    `get_current_user` re-reads the account on every request rather than trusting the
+    token's claims.
+    """
+    target = await session.get(User, user_id)
+    if target is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such user.")
+
+    if target.id == admin.id and body.is_active is False:
+        # A system with no administrators cannot be repaired through the interface.
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "You cannot deactivate your own admin account."
+        )
+
+    if body.is_active is not None:
+        target.is_active = body.is_active
+    if body.role is not None:
+        target.role = body.role
+
+    await session.commit()
+    await session.refresh(target)
+    return target
 
 
 @router.post(

@@ -9,6 +9,722 @@ what comes next.
 
 ---
 
+## 14 August 2026 — Session 24: the app takes the root, and two silent faults
+
+### What happened
+
+Retired the original single page and moved the application to `/` — **D-045**. `/app` is
+now a 308 redirect, because it has been the address for two days and is in the deployment
+links file.
+
+**The move fixed two faults nobody had noticed, and neither could have failed loudly.**
+
+**The installed app would have opened a 404.** The manifest's `start_url` and `scope` were
+`/static/app/` — never a route. The static mount serves files, not directory indexes;
+`GET /static/app/` returns 404 today. It was also in the worker's shell file list, where
+`cache.add` failed on it at every single install. The `Promise.allSettled` that tolerates
+one missing file — added deliberately, so an install never fails wholesale — is exactly
+why nobody noticed.
+
+**The service worker controlled nothing.** Registered as `/static/app/sw.js` with scope
+`/static/app/`, from a page at `/app`, which is outside that scope. A worker only controls
+clients within its scope. It installed, cached the shell, and was never once consulted.
+**Offline has never worked in production.** Every test asserted what the worker *contained*
+and none asserted what it *reached*, so the suite was green throughout.
+
+Both are the same shape: a scope may not sit above the file declaring it, and three places
+— route, manifest, registration — had to agree on one address. At the root they agree by
+construction. That, not tidiness, is the argument for the move.
+
+Also added: the worker now caches the document itself and handles navigation requests,
+which only became possible once it had root scope.
+
+### Tests
+
+**472 passing.** Down from 478, and honestly so: `test_web_page.py` had twelve tests of a
+page that no longer exists. It is now six tests that the retirement holds — the root serves
+the application, `/app` redirects, nothing routes to the old file, the manifest starts
+somewhere real, and the worker's scope covers the page it registers from.
+
+The fourth instance of a familiar failure: a test grepping for `/static/app/sw.js` matched
+the comment explaining why that path was wrong. **Tests that read source text also read the
+prose.** Narrowed to the call form.
+
+### Left on disk
+
+`web/index.html` and `tests/test_web_page.py` are still in the repository — deletion was
+declined at the prompt. Nothing routes to either. Remove with:
+
+    git rm web/index.html tests/test_web_page.py
+
+---
+
+## 14 August 2026 — Session 23: a race in five tests, not in the system
+
+### What happened
+
+The full suite against the real database: **1 failed, 487 passed**.
+`test_a_later_report_merges_into_the_existing_incident` — `IndexError`, no incident for a
+report that had just been submitted and drained.
+
+The system was behaving exactly as designed. The test was not.
+
+`drain_once()` returning zero was being read as *"the work is done"*. It means *"there was
+nothing left for me to claim"* — which is also what it returns when another worker claimed
+the row a millisecond earlier and has not committed yet. One database is shared by the
+local run, any local `uvicorn` and the deployed instance (**TD-18**), and every one of them
+runs a worker against the same table. `FOR UPDATE SKIP LOCKED` makes the second worker skip
+rather than block; that is the pattern working, and the test misread it as completion.
+
+**Five tests shared the flaw and only one had surfaced.** All five now go through
+`_settle()`, which drains and then waits for the reports to be projected — bounded at
+twenty seconds, failing with a message that distinguishes "the worker never ran" from
+"projection ran and produced nothing".
+
+The lesson, written into TD-18: **a test for an eventually-consistent system must assert
+eventually.** Written as though the pipeline were synchronous, it is a test of timing
+rather than of behaviour, and it passes until the day the system is genuinely in use.
+
+This is the second time TD-18 has produced a false failure. Both are now recorded under it
+with their mechanisms, which is what the register is for — debt whose cost is demonstrated
+twice is no longer a theoretical entry.
+
+### Then it failed again, differently — and my fix was half a fix
+
+Second run: the same test, but now the report was *never projected in 20 seconds* rather
+than read too early. The eventual-assertion was right; the twenty seconds was a guess, and
+a bad one.
+
+The queue is drained oldest-first in batches of `BATCH_SIZE = 20`. The test immediately
+before this one reseeds seventeen reports, so seventeen outbox rows sit ahead of the new
+one, and each projection is several spatial queries against a database on the other side of
+the internet — this file takes over three minutes to run for exactly that reason. A new row
+waiting behind that backlog is a queue working. A test that gives up first is measuring the
+network.
+
+Timeout raised to ninety seconds. **And the failure message now diagnoses instead of
+speculating**: it reads the outbox row and reports which of three things happened — no row
+was ever written (the transaction failed at the one job it exists for), the row is pending
+behind a stated backlog, or it was attempted and failed with `last_error` and an attempt
+count, including whether it has passed `MAX_ATTEMPTS` and will never be retried.
+
+That last part matters and I had not covered it: `drain_once` filters on
+`attempts < MAX_ATTEMPTS`, so a row that fails five times is skipped forever. A test timing
+out is indistinguishable from a poison message until something looks.
+
+**The backlog explanation is a hypothesis, not a finding.** I have no access to that
+database. If it is right, running the test alone will pass while running the file will
+have failed. If it is wrong, the new message will say so in one line instead of costing
+another round trip.
+
+### Also
+
+The earlier `seed_demo --reset` failure was not a code fault: `WinError 121 / 1231`, the
+Neon host unreachable from the laptop. It succeeded on retry.
+
+---
+
+## 14 August 2026 — Session 22: the design document
+
+### What happened
+
+Wrote `docs/09-system-design.md`, which did not exist. **System Analysis and Design is 6
+marks and there was nothing at all under it** — no architecture diagram, no data model, no
+UML, despite the paper naming UML explicitly. Design reasoning existed, scattered across
+1,100 lines of decision log and nine explainers, but scattered reasoning is not a design
+document.
+
+Thirteen sections, nine Mermaid diagrams: layered architecture with the dependency rule,
+the full ER model, four sequence diagrams (report intake, grouping and scoring, dispatch
+and the reputation feedback loop, advisory fan-out), the lifecycle state machine, the
+privacy decision tree, and a deployment view. Plus traceability from design element to
+requirement to test, and a table of what is knowingly imperfect pointing into the debt
+register.
+
+### Two corrections to my own reporting
+
+**I had been repeating "nothing pushed since session 14" for several turns.** It came from
+this file and I never checked it. It was false — commits have been going in throughout.
+What is actually true, checked: three commits unpushed on `dev`, and `origin/main` nineteen
+behind. If the submitted repository URL resolves to the default branch, an examiner is
+reading a repo that predates the entire PWA.
+
+The lesson is the same one as the service worker and `.t`/`.m`, in a third form: **a claim
+carried forward without being re-checked is not evidence, however many times it is
+repeated.** A handoff note is a snapshot, not a fact.
+
+**`Deployment_and_Source_Links.txt` claims a keep-warm ping runs every ten minutes.** It
+does not — that was never configured. A false statement in a submission document is worse
+than the cold start it was written to excuse. Either set it up or delete the sentence.
+
+### Verification
+
+`tests/test_design_docs.py` — 23 tests, and they check the document against the code rather
+than against itself: every module and service the diagrams name exists on disk, every table
+in the ER diagram is in `Base.metadata` **and every table in the metadata is in the
+diagram**, the thresholds and clustering constants quoted match the constants, and every
+D-, TD-, NFR- and test file it cites resolves to something real. A dangling citation is a
+confident statement that happens to be false, which is worse than no statement.
+
+Mermaid syntax cannot be checked from Python, so `scripts/validate-diagrams.mjs` does it
+with the real parser. It earned its place immediately: one sequence diagram would have
+rendered as a grey error box because a note contained a semicolon, which mermaid reads as
+a statement separator. Nothing in pytest could have seen that.
+
+**478 passing**, up from 455.
+
+### What is left
+
+Documents, in descending order of marks at risk: SRS (7), Testing Report (5), User Manual
+(3), Maintenance and Future Evolution (3), and the consolidated Project Documentation (3).
+Then the PDF pass. Also outstanding: push `dev` and merge to `main`, reseed for
+attachments, the keep-warm claim, no clearance integration test, and the old page at `/`.
+
+---
+
+## 14 August 2026 — Session 21: the signed-out map, built as designed
+
+### What happened
+
+Built §3 of `ui-designs.html`, designed in the previous exchange and approved before any
+code was written. **D-044.**
+
+### The gate is in the API, not the interface
+
+This is the part that matters. A gate the client draws is a gate anybody opens with curl,
+so the withholding happens in `app/routers/incidents.py`:
+
+| Field | Signed out | Why |
+|---|---|---|
+| `incident_type`, position, `status`, timestamps | shown | The road, not a person. The promise in `02-problem-and-scope.md`. |
+| `confidence` | `None` | A function of who reported it and how reliable each has been. Publishing it publishes a summary of their credibility. |
+| `report_count` | `None` | The size of the group the score came from. Withholding the score and publishing its group concedes half the point. |
+| `evidence` | `[]` | Names, credibility, photographs, recordings. NFR-4a, D-029, D-042. |
+
+`status` stays deliberately: it is the score banded at 0.35 and 0.70, so a commuter gets
+the conclusion without the working.
+
+Two details worth defending in a viva. **The evidence rows are dropped before the
+attachment query runs**, not filtered after it — so the bytes are never loaded and no
+signed URL is ever minted, and there is nothing in the response to leak by accident.
+And **`None`, never `0.0`**: a zero score is a real state, an incident decayed to nothing,
+and a client that renders "0%" for "not told" is showing a fact the server never asserted.
+There is a test for exactly that confusion.
+
+### The interface
+
+- **No navigation at all when signed out.** It previously showed two tabs, Map and Sign
+  in — a navigation bar whose every item is either where you already are or what the
+  appbar button already does. Collapsed with a `signedOut` class rather than by emptying
+  the `<nav>`, because an empty one keeps its height and border: a stripe of nothing along
+  the bottom of a phone and a blank 216px column down a desktop.
+- **The map is the page.** No list beneath it, since the list is a table of things the
+  visitor cannot open. A floating count and legend sit over the map rather than taking a
+  row from it.
+- **Markers size by status when signed out**, because the field they used to size by is
+  now null. The design said "size follows accuracy" and that was not implementable under
+  the gate the same design imposed — caught while building, and the three statuses give
+  the same visual grammar at three steps instead of continuous.
+- **The teaser answers before it asks.** Type, status and how long ago, then a named list
+  of what an account adds. Named rather than vague: "sign in for more" asks somebody to
+  pay a price for an unspecified thing.
+- **"Create an account" lands on the register tab**, via a new `/register` route. It
+  switches tab by firing the same handler a tap would, so there is one code path into
+  register mode rather than a second to keep in step.
+
+### Tests
+
+**448 passing**, up from 428. A new `test_public_map.py` — thirteen tests on the server
+gate — plus seven in `test_pwa.py` on the shell.
+
+The interface tests deliberately do not test that the teaser *hides* anything. They test
+that it never *reads* a gated field, because the hiding is the API's job and a template
+reaching for a field it must not have is one schema change from showing it.
+
+Also ran a rendering smoke check outside pytest: both branches of the map template
+evaluated with stubs and parsed for balance. `node --check` proves the JavaScript is
+valid, which is not the same as the HTML being closed.
+
+### The map got a banner
+
+Feedback on the built version: the signed-out map was correct and bland — a map with a
+count on it, saying nothing. It now carries a hero over the map, in the manner of the
+reference sites: eyebrow, headline, one sentence, the live figure, two buttons.
+
+Three things about it are engineering rather than decoration.
+
+**`pointer-events:none` on the hero, `auto` on the buttons.** This is the difference
+between a banner and a lid. Without it the headline is an invisible sheet across the top
+of the map — markers under it cannot be tapped and the map cannot be dragged from there,
+which on a phone is most of the screen. The words float; the buttons take their taps back
+explicitly. Tested.
+
+**The scrim is a gradient, not a panel.** The thing behind it is a live map, light in
+daylight tiles and dark at night. A flat tint dark enough for white text over Accra at
+night is far darker than it needs to be at midday. The gradient is opaque where the words
+are and gone before it reaches the markers.
+
+**The hero says something the map does not already say.** It carries the live count and
+how many are verified, so the headline's claim is evidenced immediately beneath it. A
+banner over a live map that repeats the map is a poster stuck on the front of the
+interface; this one is part of it.
+
+The appbar also takes the darkest stop of the scrim when signed out. White with its
+hairline border, it read as a bar pasted over the banner — two surfaces meeting at a line
+where the design has one.
+
+**452 passing.** Four new: the hero cannot capture taps meant for the map, it reads over
+both themes, it states live data, and the appbar joins rather than sits on it.
+
+### Desktop got the same treatment, and three things it needed that the phone did not
+
+The hero stays **centred** on a wide screen rather than being pinned left. Left-aligning it
+would leave the middle of the map — where the markers are — under nothing, and both
+reference sites centre the same block at both sizes. What changes is room: the measure
+grows by about two words a line and the scrim fades over a longer distance, so it has
+cleared the markers well before they begin.
+
+**The zoom control moved to the bottom when signed out.** It sat top-right, under the
+scrim. A white control beneath a dark gradient is unreadable — and because the hero passes
+taps through, it would have been usable and invisible at the same time, which is worse
+than being either.
+
+**The desktop side panel no longer blanks the map.** `sheet()` already became a 420px
+right-hand panel above 900px, but the backdrop stayed at 45% across the whole window. A
+side panel exists so the thing it describes stays visible; dimming everything behind it
+hides the map the panel is about. Dropped to 14% — faint enough to see through, still
+present as the click-outside target and as a hint about which layer is being addressed.
+That one is not signed-out-specific: it improves every sheet on a desktop.
+
+**455 passing.** Three more: the hero has a desktop treatment rather than being the phone
+layout stretched, the zoom control leaves the scrim, and the desktop dim is not a blackout.
+
+`ui-designs.html` §3 updated to match on both screens, so the deliverable and the build do
+not diverge.
+
+### What is unresolved
+
+- Nothing pushed since session 14. Seven sessions.
+- Clearance still has no integration test.
+- The five submission PDFs are still unassembled.
+- `docs/design/ui-designs.html` §3 still says pin size follows accuracy on the signed-out
+  map. The build corrected this to status; the design should be amended to match.
+
+---
+
+## 14 August 2026 — Session 20: three components instead of nine copies
+
+### What happened
+
+Interface corrections, and the pattern behind all of them was the same: **markup that
+should have been written once had been written three times, and the copies had drifted.**
+
+### Rows of figures
+
+Dispatch, admin and the profile each rendered a row of numbers, and each built its own
+markup — different font sizes, different spacing, no boundary between one figure and the
+next, so "2 awaiting a warden · 0 being attended · 42 reports held" read as one run-on
+sentence. Now one `stats()` helper and a `.stats` grid: each figure is a tile, digits are
+tabular so columns line up, and `auto-fit` lets six wrap on a phone and sit in one row on
+a console without the view knowing how many there are.
+
+The admin queue count is flagged `bad` when it is non-zero — it is the one figure there
+that is bad news when large rather than good.
+
+### The account rows had a real bug
+
+A label and its value were two `<span>`s with no `display:block` between them, so they
+rendered on one line: *"Display nameAma Boateng"*. They are a pair and needed to look like
+one. Now a `<dl>` on a grid — value under its label on a phone, one line from 640px, the
+action holding the right-hand column across both rows. The same rule serves both
+arrangements, so neither is a special case.
+
+"Edit" and "Change" became icon buttons. An icon button has no text, so each carries an
+`aria-label`; without one a screen reader announces "button" and stops. Two new icons,
+`pencil` and `key`, and `icon()` gained an optional class so the stylesheet can reach a
+chevron that needs to rotate.
+
+### Your reports open now
+
+Each is a card: type on the left, when on the right, chevron to open. Inside are the note
+as written, the exact time, the coordinates — and **what was attached**, fetched when the
+panel opens rather than with the list. Twenty-five reports would otherwise be twenty-five
+requests nobody asked for, on a connection this system assumes is bad. Fetched once and
+kept.
+
+That last part is worth more than it looks. Until now a reporter had no way at all to
+confirm their own photograph or recording had arrived; they had to trust it. Given that
+session 19 was spent on evidence silently not arriving, the profile is now where you check.
+
+### Tests
+
+**426 passing**, up from 413. Thirteen new, and they are about drift rather than
+appearance: every view uses the shared component, a figure has a boundary and tabular
+digits, a label and value cannot run together again, the one-line arrangement is the
+exception rather than the phone layout, an icon-only action still says what it does, the
+chevron turns rather than being swapped, and evidence is fetched only on open.
+
+One test was again written too bluntly — banning `font-size:20px` across a view caught the
+legitimate single headline figure on the profile. Narrowed to the exact hand-rolled markup
+being retired. **Third time in three sessions.** The rule I keep relearning: *test for the
+specific thing being replaced, not for a family of things that happens to include it.*
+
+### And then the actual cause
+
+The routes page had the same complaint — corridor name and description on one line. It was
+not a third instance of a layout mistake. **`.t` and `.m` were `display:inline`.**
+
+They are the title-and-detail pair used across the whole application: a name and its
+credibility, an incident type and its timestamp, a corridor and its description. As inline
+boxes they ran together wherever the parent did not happen to be a flex column, and `.m`'s
+`margin-top:2px` did nothing at all, because vertical margins do not apply to an inline
+box. It looked right in the places a flex parent forced a column and wrong everywhere
+else — which is exactly why one bug arrived as three unrelated complaints across two
+sessions, and why the account rows got their own grid before the cause was understood.
+
+Two words of CSS. The grid on the account rows stays, because that one also has to move a
+button between arrangements, but the routes page and every other title/detail pair in the
+app were fixed by the same line.
+
+Two tests: `.t` and `.m` must be block, and — the meta-test that matters — no view may
+put the two on one line, because that assumption is what makes the fix safe.
+
+**This is the same lesson as session 19, in a different layer: when the same symptom is
+explained three different ways, the explanation is wrong.** Twice in two days. The tell
+both times was a fix that worked without accounting for why the other cases differed.
+
+### What is unresolved
+- Everything from session 19: nothing pushed since session 14, no clearance integration
+  test, the five submission PDFs unassembled.
+
+---
+
+## 14 August 2026 — Session 19: attachments were unviewable, and why
+
+### What happened
+
+Testing the live app found that an uploaded photograph showed as a blank box, and opening
+its URL directly returned `{"detail":"No such attachment."}`. Three separate faults, one
+of them a design error that had been sitting there since voice notes were built.
+
+### 1. A browser cannot send a token on an image
+
+**This is the important one.** Every request in this system proves who is asking with an
+`Authorization: Bearer …` header, added by `fetch`. But `<img src>` and `<audio src>`
+cannot send a header — the browser issues those requests on its own and there is no hook
+to add one.
+
+So any attachment that was not public was, in practice, **unviewable by everybody,
+including the person who had just uploaded it.** They could see it listed and could not
+open it. The interface was asking the browser to do something the browser cannot do, and
+the failure surfaced as a 404, which looks like missing data rather than a missing header.
+
+Fixed with **signed, short-lived URLs** — D-043, `app/media_tokens.py`. When the API
+returns an attachment to a caller `may_play` has already cleared, it appends a token
+naming that one attachment for ten minutes. This is the mechanism behind an S3 presigned
+URL and for the same reason: check the entitlement once where the caller is known, then
+carry it to a place where they are not.
+
+The token has an audience claim, so it cannot be used as a login token and a login token
+cannot be used as it. Both are signed with the same secret; without the claim they would
+be interchangeable, and a media URL — which leaks through history and referrers — would
+have become a session.
+
+### 2. Photographs inherited a privacy default meant for voices
+
+`upload_photo` never passed `is_public`, so it took the model default of `False` — the
+default written for recordings. D-029's reasoning was specific and I did not carry it
+through: **a recording carries the reporter's voice, so sharing it exposes the accuser.**
+A photograph of a flooded road describes the road.
+
+The result was the worst of both: the most useful thing you can show a commuter was
+invisible to all of them, while the actual privacy interest was protected by a default
+nobody had considered separately. Photographs now default to shared and remain
+withdrawable — **D-042**.
+
+This is the same class of error as D-036: a decision inherited a constraint from the case
+it was copied from, and nobody checked whether the constraint still applied.
+
+### 3. Upload failures were swallowed
+
+`sendEntry` ended both attachment calls with `.catch(() => {})`. A rejected photograph or
+recording vanished without a word — the user saw "Reported. Thank you." and their evidence
+was simply not there. That is almost certainly why the voice note never appeared: the
+request failed and nothing said so.
+
+Now collected and reported: *"Reported, but your recording could not be attached
+(<reason>)."* The report still stands, because evidence is an addition to a report and
+never a precondition for one — but silence about a failure the user could act on is worse
+than the failure.
+
+### 4. Nobody could check what they had attached
+
+Added a full-size preview of the chosen photograph and an `<audio>` player for the
+recording, both from local object URLs — no upload, no round trip, works with no
+connection. A recording made in traffic is as likely to be wind noise as speech, and the
+person who made it is the only one who can tell.
+
+Also fixed a bug found while doing it: the file input's `change` listener was bound to the
+element, and removing a photograph replaced that element, so choosing a second photograph
+silently did nothing. Delegated to the container.
+
+### Also
+
+`Content-Disposition` is now `inline` for images and stays `attachment` for everything
+else — which is why opening the URL directly downloaded a file instead of showing a
+picture. `inline` is safe on an image and only on an image: the type was allow-listed on
+the way in, is echoed back rather than guessed, and `nosniff` stops the browser overruling
+it. Audio containers can hold almost anything, so audio keeps `attachment`.
+
+### Tests
+
+**410 passing**, up from 395. Fifteen new in `test_attachments.py` covering the token: it
+opens the attachment it was minted for and no other, is refused when signed with a
+different secret or expired, treats junk as "no" rather than a 500, cannot be exchanged
+either way with a login token, and does not name the viewer.
+
+### Two more, found while chasing the recording
+
+**The service worker version had never been bumped.** `VERSION` sat at `"v1"` through the
+entire build. `cacheFirst` hands back the copy it already has and revalidates behind it,
+so every deploy landed one page-load late — the fix is live, the server is serving it, and
+the user is still running the old JavaScript. Indistinguishable, from the outside, from
+the fix not working. This is almost certainly why the new "could not be attached" message
+did not appear: the page was still running the version that swallowed the error.
+
+**A cached incident detail leaked one viewer's evidence to the next.** The rule was
+`startsWith("/incidents")`, which matches `/incidents/{id}` as well as `/incidents`. The
+cache is keyed by URL and knows nothing about who asked — so a reporter viewing their own
+incident cached a response containing their private recording *and a signed URL that still
+worked*, ready to be served to whoever used the phone next. Narrowed to the list only,
+which is identical for everybody and is the thing worth having offline anyway.
+
+Neither was reported by a user. Both were found by reading the caching layer while looking
+for something else, which is the argument for reading code around a bug rather than only
+at it.
+
+**And a third, from the same cause.** An edit to `admin.js` did not appear in the DOM at
+all — the class was in the file and in the stylesheet, and the element rendered without
+it. Same worker, same `cacheFirst`. It had by then cost time three separate times while
+being read as three different bugs, so it is now fixed at the source: **the worker does
+not register on `localhost`, and actively unregisters any it finds and empties the
+caches.** Skipping registration alone would not have helped, because a worker already
+registered keeps controlling the page.
+
+Offline report queuing is untouched — that is IndexedDB in `api.js` and never depended on
+the worker. What is given up locally is offline *shell* caching, which is tested against
+the deployed site, where it is the only place it matters.
+
+The general lesson, and it is the second time this log has recorded a version of it:
+**when the same symptom is explained three different ways, the explanation is wrong.**
+Photos not loading, an error toast not appearing, and a class not rendering were one bug.
+
+### A diagnostic rather than another guess
+
+`scripts/check_evidence.py` lists the most recent reports and exactly what is attached to
+each — kind, size, shared or private. A missing attachment has two causes that look
+identical from the interface: the upload never succeeded, or it succeeded and the viewer
+is not allowed to see it. The first is a bug and the second is the privacy rule working
+correctly. The script says which.
+
+### What is unresolved
+
+- Still nothing pushed to git since session 14. Five sessions now.
+- The signed URL cannot be cached by the service worker, since the token changes each
+  time. Correct for private evidence, wasteful for a public photograph fetched twice.
+  Worth a debt entry if it matters; it does not yet.
+- Clearance still has no integration test.
+- The five submission PDFs are still unassembled.
+
+### What comes next
+
+Push, then the submission documents.
+
+---
+
+## 14 August 2026 — Session 18: the interface's vocabulary, and evidence per report
+
+### What happened
+
+A round of interface corrections from testing the live app, all of them small individually
+and all of them about the same thing: **the screen was showing the system's internal
+vocabulary and internal numbers to people who are not the system's author.**
+
+### What changed
+
+| Area | Change | Recorded as |
+|---|---|---|
+| Wording | "confidence" → **accuracy**, "reputation"/"standing" → **credibility**, everywhere on screen. Code, columns and API unchanged | D-039 |
+| Numbers | Every score is now a whole percentage, **rounded down** — never a raw `0.62`, never rounded to nearest | D-040 |
+| Incident popup | Each reporter row now opens to show the note they typed, their photographs and a player for their recording | D-041 |
+| Alerts | Moved from the bottom of the screen to the top, and given four colour variants — info, success, warning, error — each with a matching text colour rather than one grey box | — |
+| Status tags | Capitalised once, in the stylesheet, instead of in each of the four places a status is rendered | — |
+| Report tab | Was a raised green pill that read as a floating button sitting on the navigation. It is now an ordinary tab with the same active state as the other four | — |
+
+The alerts change is not cosmetic. The tab bar owns the bottom of the screen, so a message
+appearing there arrives under a thumb resting on the navigation. An error toast now also
+carries `role="alert"` and `aria-live="assertive"`, and stays seven seconds rather than
+four, because an error a user missed is an error they will hit again.
+
+**Seeded evidence.** The popup had nothing to show, because the seed created reports but
+never attachments. It now generates six — five photographs and a recording — with no
+third-party library: the PNG is written byte by byte with `zlib` and `struct`, the WAV with
+the standard library's `wave` module. One recording is deliberately left **unshared**, on
+the Kaneshie incident, so the consent rule from D-029 is visible in the demo rather than
+only described in a document. Run `python -m scripts.seed_demo --reset` to pick these up.
+
+**The API had to change to make this possible.** `EvidenceResponse` now carries `note` and
+`attachments`, and `GET /incidents/{id}` batch-loads attachments in one query, filtering
+each through `may_play()`. The filtering happens server-side, so an unshared recording is
+*invisible* rather than listed and then refused — listing it would leak that it exists,
+which is most of what the rule is protecting.
+
+### Tests
+
+**395 passing**, up from 381. Fourteen new, all in `test_pwa.py`:
+
+- no view spells out "confidence", "reputation" or "standing" — comments are stripped
+  first, since the explanation of the rename is allowed to name the old words, and
+  identifiers are stripped too, since `inc.confidence` is an API field and not a visible
+  word
+- `pct` uses `Math.floor` and not `Math.round`
+- no view calls `.toFixed` on a score
+- the toast is anchored to the top and each of the four kinds sets both a background and a
+  text colour
+- tags are capitalised in CSS and nowhere else
+- the incident detail has expandable rows, an `<audio>` element, an `<img>`, and marks an
+  unshared recording
+
+The vocabulary test carries a meta-assertion — `len(views) >= 10` — for the reason
+recorded three times already in this log: **when a test asserts something about a
+collection, assert the collection is non-empty first.** It was also verified against a
+planted violation before being committed, rather than trusted because it went green.
+
+One test was written too bluntly and caught by its own suite: banning `.toUpperCase()`
+across all modules failed because avatars legitimately upper-case initials. Narrowed to
+lines that render a tag. Same family of error as the focus-outline test in session 15.
+
+### Where things stand
+
+Unchanged from session 17, except that the interface now reads as a product rather than as
+a debugging view of the database.
+
+### What is unresolved
+
+- Nothing pushed to git since session 14. This is now four sessions of work sitting in a
+  working tree, and it is the largest single risk to the submission.
+- Clearance still has no integration test and no resolved incident in the seed.
+- The five submission PDFs are still unassembled — the content exists across `docs/`.
+- The old page at `/` has not been retired.
+
+### What comes next
+
+Push. Then the submission documents.
+
+---
+
+## 13 August 2026 — Session 17: the interface rebuilt as a PWA
+
+### What happened
+
+**The interface was rebuilt**, after review found it had been left at Tier 0 while the API
+grew to Tier 2. Recorded as **D-036**, and recorded as my error rather than as a plan: when
+the deadline extended and scope was revisited, the front-end budget was not revisited with
+it. The general lesson is written into the entry — *when a constraint that produced a
+decision changes, every decision derived from it needs revisiting, not only the ones
+currently being worked on.*
+
+**Both interfaces now run side by side.** `/` is the original page, `/app` is the new one.
+A graded deployment should never be one bad commit from having nothing to show; the old
+page retires once the new one has been exercised live.
+
+### What was built
+
+Three API endpoints the design needed and that did not exist — `PATCH /auth/me`,
+`POST /auth/me/password`, `PATCH /auth/users/{id}`. The last one is only a route: `is_active`
+has been on the model and checked on every request since B03, with no way to set it.
+
+A progressive web application in `web/app/` — **no framework and no build step** (**D-037**).
+Native ES modules, plain CSS with custom properties. A bundler would put Node in the
+deployment pipeline, and deployment is pass-or-fail for three marks; it buys nothing the
+design needs, because "modern" here is a spacing scale, a type scale, semantic tokens and
+real states, none of which are framework features.
+
+Twelve modules: `api` (with the offline queue), `store`, `router`, `ui`, and eight views —
+map, report, alerts, routes, profile, auth, dispatch, admin. Plus a service worker, a
+manifest, and generated icons including a maskable one.
+
+### Decisions worth defending
+
+**Offline report queuing.** A report filed with no signal goes to IndexedDB and sends
+itself when the connection returns. This is only safe because of a decision made at B04,
+long before there was a client: every report carries an idempotency key generated **at
+capture**, so the same physical report keeps one identity however many times it is
+retried. NFR-2 asks for this; the design paid for it months earlier.
+
+**The service worker is deliberately conservative.** GET only — a cached POST would mean a
+report appearing to succeed twice. Attachments and `/auth/` are never cached, because a
+recording identifies its speaker and a cached token outlives a sign-out. Stale responses
+are labelled so the interface can say "showing what was last loaded" rather than pretend.
+It does not use Background Sync: that API is absent on iOS, and a queue that works on some
+phones is worse than one that works predictably on all of them.
+
+**Avatars are initials** (**D-038**). A face beside a name in an officer's evidence list
+makes a reporter easier to identify, which is what NFR-4a exists to prevent.
+
+**Dark mode is a use case, not a preference** — this is read at night, in a car, at arm's
+length.
+
+### Three test failures worth recording
+
+All three were the test being wrong rather than the code, and two were the same mistake.
+
+**Optional chaining broke the endpoint extractor.** `${inc.evidence[0]?.report_id}`
+contains a question mark, and the regex stripped query strings *before* template
+expressions — truncating the path mid-expression. Order now reversed, with the reason in
+the docstring.
+
+**`addAll` and `localStorage` both matched their own explanatory comments.** A test that
+greps source text is testing the prose as well as the behaviour. Both now check for the
+call — `cache.addAll(`, `localStorage.` — rather than the word.
+
+**The focus test was too blunt.** It forbade `outline:none` outright, but the text inputs
+trade the outline for a coloured ring, which is both accessible and better looking. The
+rule is not "never remove an outline", it is "never leave a focused element unmarked", and
+the test now parses each `:focus` rule and checks for a replacement.
+
+### Verified
+
+| Check | Result |
+|---|---|
+| Full suite | **379 passed, 8 skipped** |
+| All twelve ES modules parse | pass (checked with node) |
+| Every endpoint the app calls exists in the schema | pass |
+| Every manifest icon is served | pass |
+| Every shell file the worker lists exists | pass |
+| Service worker caches GET only, never attachments or auth | pass |
+| No token or secret embedded; no localStorage | pass |
+| Registration form has no role field | pass |
+| Map failure degrades rather than blanks the view | pass |
+| Focus visible, reduced motion, dark mode, 44px targets | pass |
+
+### Unresolved
+
+1. **Nothing pushed since session 14.** Migrations, reseed, commit, push, then click
+   through `/app` on the live deployment.
+2. Clearance still has no integration test and is not visible in the seeded demo.
+3. The old page at `/` is still there by design, and should be retired once `/app` is
+   proven.
+
+### Next actions, in order
+
+1. `alembic upgrade head`, `python -m scripts.seed_demo --reset`, `pytest`, push
+2. Exercise `/app` live — install it, turn off data, file a report, watch it queue and send
+3. The five submission documents: SRS, Testing Report, Technical Debt Plan, User Manual,
+   consolidated Project Documentation
+
+---
+
 ## 13 August 2026 — Session 16: B22 the web page — the build is complete
 
 ### What happened
