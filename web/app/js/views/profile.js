@@ -10,7 +10,7 @@ import { go } from "../router.js";
 import { loadUser, signOut, state } from "../store.js";
 import {
   LABEL, ago, avatar, empty, errorState, esc, icon, pct, rules, sheet, closeSheet,
-  skeleton, toast, validate,
+  skeleton, stats as statTiles, toast, validate,
 } from "../ui.js";
 
 export default function profileView(mount) {
@@ -38,12 +38,10 @@ export default function profileView(mount) {
             <strong class="num" style="font-size:20px">${pct(user.reputation)}</strong>
           </div>
           <div class="bar" style="margin:10px 0"><i style="width:${Math.floor(user.reputation*100)}%"></i></div>
-          <div class="inline" style="gap:20px;margin-top:12px;text-transform:uppercase;text-align:center">
-            <span><strong style="font-size:18px">${user.reports_confirmed}</strong>
-              <span class="xs" style="display:block">confirmed</span></span>
-            <span><strong style="font-size:18px;color:var(--red)">${user.reports_contradicted}</strong>
-              <span class="xs" style="display:block">not found</span></span>
-          </div>
+          <div style="margin-top:12px">${statTiles([
+            [user.reports_confirmed, "confirmed"],
+            [user.reports_contradicted, "not found", "bad"],
+          ])}</div>
           <p class="hint" style="margin-top:12px">
             Your credibility rises when a warden confirms something you reported, and falls when
             one attends and finds nothing. It decides how much weight your reports carry —
@@ -54,20 +52,27 @@ export default function profileView(mount) {
 
         <div class="card">
           <h2>Account</h2>
-          <div class="list">
-            <div class="row-between">
-              <span><span class="xs">Display name</span><span class="t">${esc(user.display_name)}</span></span>
-              <button class="btn btn--ghost btn--sm" id="editName">Edit</button>
+          <dl class="deets" style="margin:0">
+            <div class="deet">
+              <dt>Display name</dt>
+              <dd>${esc(user.display_name)}</dd>
+              <button class="btn btn--ghost btn--icon deet__act" id="editName"
+                      aria-label="Edit your display name" title="Edit display name">
+                ${icon("pencil",17)}</button>
             </div>
-            <div class="row-between">
-              <span><span class="xs">Email</span><span class="t muted">${esc(user.email)}</span></span>
-              <span class="tag tag--reported">locked</span>
+            <div class="deet">
+              <dt>Email</dt>
+              <dd class="muted">${esc(user.email)}</dd>
+              <span class="tag tag--reported deet__act">locked</span>
             </div>
-            <div class="row-between">
-              <span><span class="xs">Password</span><span class="t muted">••••••••</span></span>
-              <button class="btn btn--ghost btn--sm" id="editPass">Change</button>
+            <div class="deet">
+              <dt>Password</dt>
+              <dd class="muted">••••••••</dd>
+              <button class="btn btn--ghost btn--icon deet__act" id="editPass"
+                      aria-label="Change your password" title="Change password">
+                ${icon("key",17)}</button>
             </div>
-          </div>
+          </dl>
           <p class="hint" style="margin-top:10px">
             Your email is how you sign in. Changing it would need a verification message this
             system cannot send yet, so it is fixed — ask an administrator if it is wrong.
@@ -76,7 +81,7 @@ export default function profileView(mount) {
 
         <div class="card">
           <h2>Your reports</h2>
-          <div class="list" id="reports">${skeleton(3)}</div>
+          <div id="reports">${skeleton(3)}</div>
         </div>
 
         <button class="btn btn--danger btn--block" id="out">${icon("logout",16)} Sign out</button>
@@ -99,15 +104,81 @@ export default function profileView(mount) {
         box.innerHTML = empty("Nothing yet", "Reports you file will appear here with what came of them.");
         return;
       }
-      box.innerHTML = reports.map(r => `
-        <div class="row-between">
-          <span class="grow">
+      box.innerHTML = reports.map((r, i) => `
+        <div class="disc">
+          <button class="disc__head" aria-expanded="false" data-open="${i}"
+                  aria-controls="rep_${i}">
             <span class="t">${esc(labelFor(r.incident_type))}</span>
-            <span class="m">${esc(ago(r.occurred_at))}${r.note ? ` · ${esc(r.note.slice(0,44))}${r.note.length>44?"…":""}` : ""}</span>
-          </span>
+            <span class="inline" style="gap:var(--s2)">
+              <span class="m" style="margin:0">${esc(ago(r.occurred_at))}</span>
+              ${icon("chevron",16,"chev")}
+            </span>
+          </button>
+          <div class="disc__body hide" id="rep_${i}" data-body="${i}"
+               data-report-id="${esc(r.id)}">
+            ${r.note
+              ? `<p style="margin:0 0 10px;font-size:13.5px;line-height:1.5">\u201c${esc(r.note)}\u201d</p>`
+              : `<p class="xs faint" style="margin:0 0 10px">No note was written with this report.</p>`}
+            <div class="xs" style="line-height:1.7">
+              <div>Filed ${esc(new Date(r.occurred_at).toLocaleString("en-GB",
+                { dateStyle:"medium", timeStyle:"short" }))}</div>
+              <div class="num">${r.latitude.toFixed(5)}, ${r.longitude.toFixed(5)}</div>
+            </div>
+            <div data-evidence="${i}" style="margin-top:10px"></div>
+          </div>
         </div>`).join("");
+
+      wireDisclosure(box);
     } catch (err) {
       box.innerHTML = errorState(err.message);
+    }
+  }
+
+  /* Open one report to see what it actually carried.
+   *
+   * The evidence is fetched when the panel opens rather than with the list — twenty-five
+   * reports would otherwise be twenty-five requests nobody asked for, on a connection
+   * this system assumes is bad. Fetched once and kept, so opening and closing the same
+   * report does not ask again.
+   *
+   * This is also the only place a reporter can confirm their own photograph or recording
+   * arrived, which until now they simply had to trust. */
+  function wireDisclosure(root) {
+    root.querySelectorAll("[data-open]").forEach((head) => {
+      const body = root.querySelector(`[data-body="${head.dataset.open}"]`);
+      head.addEventListener("click", () => {
+        const closed = body.classList.toggle("hide");
+        head.setAttribute("aria-expanded", String(!closed));
+        if (!closed) loadEvidence(body, head.dataset.open);
+      });
+    });
+  }
+
+  async function loadEvidence(body, index) {
+    const slot = body.querySelector(`[data-evidence="${index}"]`);
+    if (slot.dataset.loaded) return;
+    slot.dataset.loaded = "1";
+    slot.innerHTML = `<span class="xs faint">Checking what was attached…</span>`;
+    try {
+      const items = await api(`/reports/${body.dataset.reportId}/attachments`);
+      if (!items.length) {
+        slot.innerHTML = `<span class="xs faint">Nothing attached.</span>`;
+        return;
+      }
+      slot.innerHTML = items.map(a => a.kind === "photo"
+        ? `<a href="${esc(a.url)}" target="_blank" rel="noopener"
+              style="display:inline-block;width:72px;height:72px;border-radius:var(--r-sm);
+                     overflow:hidden;background:var(--grey-100);margin-right:8px">
+             <img src="${esc(a.url)}" alt="Photograph you attached" loading="lazy"
+                  style="width:100%;height:100%;object-fit:cover"></a>`
+        : `<div style="margin-top:6px">
+             <div class="xs" style="margin-bottom:4px">${icon("mic",13)}
+               Your recording${a.is_public ? "" : " · only you and the control room"}</div>
+             <audio controls preload="none" src="${esc(a.url)}"
+                    style="width:100%;height:34px"></audio>
+           </div>`).join("");
+    } catch (err) {
+      slot.innerHTML = `<span class="xs" style="color:var(--red)">${esc(err.message)}</span>`;
     }
   }
 

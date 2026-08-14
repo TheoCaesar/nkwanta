@@ -9,7 +9,7 @@
  */
 
 import { api } from "../api.js";
-import { esc, icon, closeSheet, empty, errorState, pct, rules, sheet, skeleton, toast, validate, avatar } from "../ui.js";
+import { esc, icon, closeSheet, empty, errorState, pct, rules, sheet, skeleton, stats as statTiles, toast, validate, avatar } from "../ui.js";
 
 const ROLES = ["commuter", "warden", "officer", "admin"];
 
@@ -21,7 +21,7 @@ export default function adminView(mount) {
     <div class="scroll pad stack">
       <div class="card">
         <h2>System</h2>
-        <div class="inline centerCap" style="gap:22px;" id="stats">${skeleton(1)}</div>
+        <div id="stats">${skeleton(1)}</div>
       </div>
 
       <div class="card">
@@ -114,13 +114,13 @@ export default function adminView(mount) {
   }
 
   function renderStats(s) {
-    mount.querySelector("#stats").innerHTML = [
+    mount.querySelector("#stats").innerHTML = statTiles([
       [s.users, "accounts"], [s.reports, "reports"], [s.incidents, "incidents"],
       [s.incidents_verified, "verified"], [s.notifications, "alerts sent"],
-      [s.outbox_pending, "queued"],
-    ].map(([n, label]) =>
-      `<span><strong style="font-size:20px">${n}</strong>
-       <span class="xs" style="display:block">${esc(label)}</span></span>`).join("");
+      // A queue that is not empty means the outbox worker is behind, which is the one
+      // figure here that is bad news when it is large rather than good.
+      [s.outbox_pending, "queued", s.outbox_pending ? "bad" : null],
+    ]);
   }
 
   function renderGateway(g) {

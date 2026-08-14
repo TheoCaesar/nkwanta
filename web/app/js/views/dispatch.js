@@ -12,7 +12,7 @@ import { api } from "../api.js";
 import { refreshIncidents, role, state } from "../store.js";
 import {
   LABEL, TYPE_LABEL, ago, avatar, closeSheet, empty, errorState, esc, icon,
-  pct, sheet, skeleton, toast,
+  pct, sheet, skeleton, stats as statTiles, toast,
 } from "../ui.js";
 
 export default function dispatchView(mount) {
@@ -23,7 +23,7 @@ export default function dispatchView(mount) {
       ${isWarden ? "" : `
         <div class="card">
           <h2>Today</h2>
-          <div class="inline centerCap" style="gap:24px" id="stats">${skeleton(1)}</div>
+          <div id="stats">${skeleton(1)}</div>
         </div>`}
       <div class="card">
         <h2>${isWarden ? "Assigned to you" : "Dispatch queue"}</h2>
@@ -62,14 +62,12 @@ export default function dispatchView(mount) {
     if (!box) return;
     const awaiting = queue.filter(i => i.status === "verified").length;
     const assigned = queue.filter(i => i.status === "assigned").length;
-    box.innerHTML = `
-      ${stat(awaiting, "awaiting a warden")}
-      ${stat(assigned, "being attended")}
-      ${stats ? stat(stats.reports, "reports held") : ""}`;
+    box.innerHTML = statTiles([
+      [awaiting, "awaiting a warden"],
+      [assigned, "being attended"],
+      ...(stats ? [[stats.reports, "reports held"]] : []),
+    ]);
   }
-
-  const stat = (n, label) =>
-    `<span><strong style="font-size:22px">${n}</strong><span class="xs" style="display:block">${esc(label)}</span></span>`;
 
   function renderQueue(items, wardens) {
     const box = mount.querySelector("#queue");

@@ -9,6 +9,93 @@ what comes next.
 
 ---
 
+## 14 August 2026 — Session 20: three components instead of nine copies
+
+### What happened
+
+Interface corrections, and the pattern behind all of them was the same: **markup that
+should have been written once had been written three times, and the copies had drifted.**
+
+### Rows of figures
+
+Dispatch, admin and the profile each rendered a row of numbers, and each built its own
+markup — different font sizes, different spacing, no boundary between one figure and the
+next, so "2 awaiting a warden · 0 being attended · 42 reports held" read as one run-on
+sentence. Now one `stats()` helper and a `.stats` grid: each figure is a tile, digits are
+tabular so columns line up, and `auto-fit` lets six wrap on a phone and sit in one row on
+a console without the view knowing how many there are.
+
+The admin queue count is flagged `bad` when it is non-zero — it is the one figure there
+that is bad news when large rather than good.
+
+### The account rows had a real bug
+
+A label and its value were two `<span>`s with no `display:block` between them, so they
+rendered on one line: *"Display nameAma Boateng"*. They are a pair and needed to look like
+one. Now a `<dl>` on a grid — value under its label on a phone, one line from 640px, the
+action holding the right-hand column across both rows. The same rule serves both
+arrangements, so neither is a special case.
+
+"Edit" and "Change" became icon buttons. An icon button has no text, so each carries an
+`aria-label`; without one a screen reader announces "button" and stops. Two new icons,
+`pencil` and `key`, and `icon()` gained an optional class so the stylesheet can reach a
+chevron that needs to rotate.
+
+### Your reports open now
+
+Each is a card: type on the left, when on the right, chevron to open. Inside are the note
+as written, the exact time, the coordinates — and **what was attached**, fetched when the
+panel opens rather than with the list. Twenty-five reports would otherwise be twenty-five
+requests nobody asked for, on a connection this system assumes is bad. Fetched once and
+kept.
+
+That last part is worth more than it looks. Until now a reporter had no way at all to
+confirm their own photograph or recording had arrived; they had to trust it. Given that
+session 19 was spent on evidence silently not arriving, the profile is now where you check.
+
+### Tests
+
+**426 passing**, up from 413. Thirteen new, and they are about drift rather than
+appearance: every view uses the shared component, a figure has a boundary and tabular
+digits, a label and value cannot run together again, the one-line arrangement is the
+exception rather than the phone layout, an icon-only action still says what it does, the
+chevron turns rather than being swapped, and evidence is fetched only on open.
+
+One test was again written too bluntly — banning `font-size:20px` across a view caught the
+legitimate single headline figure on the profile. Narrowed to the exact hand-rolled markup
+being retired. **Third time in three sessions.** The rule I keep relearning: *test for the
+specific thing being replaced, not for a family of things that happens to include it.*
+
+### And then the actual cause
+
+The routes page had the same complaint — corridor name and description on one line. It was
+not a third instance of a layout mistake. **`.t` and `.m` were `display:inline`.**
+
+They are the title-and-detail pair used across the whole application: a name and its
+credibility, an incident type and its timestamp, a corridor and its description. As inline
+boxes they ran together wherever the parent did not happen to be a flex column, and `.m`'s
+`margin-top:2px` did nothing at all, because vertical margins do not apply to an inline
+box. It looked right in the places a flex parent forced a column and wrong everywhere
+else — which is exactly why one bug arrived as three unrelated complaints across two
+sessions, and why the account rows got their own grid before the cause was understood.
+
+Two words of CSS. The grid on the account rows stays, because that one also has to move a
+button between arrangements, but the routes page and every other title/detail pair in the
+app were fixed by the same line.
+
+Two tests: `.t` and `.m` must be block, and — the meta-test that matters — no view may
+put the two on one line, because that assumption is what makes the fix safe.
+
+**This is the same lesson as session 19, in a different layer: when the same symptom is
+explained three different ways, the explanation is wrong.** Twice in two days. The tell
+both times was a fix that worked without accounting for why the other cases differed.
+
+### What is unresolved
+- Everything from session 19: nothing pushed since session 14, no clearance integration
+  test, the five submission PDFs unassembled.
+
+---
+
 ## 14 August 2026 — Session 19: attachments were unviewable, and why
 
 ### What happened

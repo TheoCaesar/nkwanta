@@ -540,3 +540,125 @@ def test_the_incident_detail_can_open_a_single_report() -> None:
 
 def test_a_recording_the_reporter_kept_private_is_marked_as_such() -> None:
     assert "not shared" in JS["map.js"].lower()
+
+
+# =============================================================================
+# SHARED COMPONENTS
+#
+# Three views showed a row of figures and each built its own markup, so "2 awaiting a
+# warden" and "42 reports held" were the same kind of fact rendered three ways. The same
+# had happened to the account rows. These tests are about the versions not drifting apart
+# again — which is the only failure a shared component actually has.
+# =============================================================================
+
+
+CSS = (APP_DIR / "css" / "app.css").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("view", ["dispatch.js", "admin.js", "profile.js"])
+def test_every_row_of_figures_uses_the_same_component(view: str) -> None:
+    assert "statTiles(" in JS[view], f"{view} builds its own figures"
+    # The hand-rolled version each view used to carry: a bare <strong> with the label
+    # forced under it by an inline `display:block`. A single headline figure is still
+    # allowed to size itself — what must not come back is a row of them built by hand.
+    assert 'class="xs" style="display:block"' not in JS[view], (
+        f"{view} still hand-builds a row of figures"
+    )
+
+
+def test_a_figure_is_a_tile_rather_than_loose_text() -> None:
+    """A number with a word under it is a claim about the system. Three of them in a row
+    with nothing between them read as one run-on sentence."""
+    assert re.search(r"\.stat\s*\{[^}]*border", CSS), "a stat has no boundary"
+    assert re.search(r"\.stats\s*\{[^}]*grid", CSS)
+    # auto-fit, so six tiles wrap on a phone without the view knowing how many there are.
+    assert "auto-fit" in re.search(r"\.stats\s*\{([^}]*)\}", CSS).group(1)
+
+
+def test_figures_line_up_digit_by_digit() -> None:
+    """Proportional digits make a column of numbers look ragged and slightly wrong."""
+    stat = re.search(r"\.stat strong\s*\{([^}]*)\}", CSS).group(1).replace(" ", "")
+    assert "font-variant-numeric:tabular-nums" in stat
+
+
+def test_a_label_and_its_value_do_not_run_together() -> None:
+    """They were two inline spans, which rendered as "Display nameAma Boateng"."""
+    assert re.search(r"\.deet dt\s*\{", CSS) and re.search(r"\.deet dd\s*\{", CSS)
+    deet = re.search(r"\.deet\s*\{([^}]*)\}", CSS).group(1).replace(" ", "")
+    assert "display:grid" in deet
+    assert "<dl class=\"deets\"" in JS["profile.js"], "an account row is a label/value pair"
+
+
+def test_the_value_sits_under_its_label_until_there_is_room_for_one_line() -> None:
+    assert re.search(r"@media \(min-width:640px\)\s*\{\s*\.deet\s*\{", CSS), (
+        "the one-line arrangement should be the exception, not the phone layout"
+    )
+
+
+@pytest.mark.parametrize("label", ["display name", "password"])
+def test_an_icon_only_action_still_says_what_it_does(label: str) -> None:
+    """An icon button has no text, so its name has to come from somewhere. Without this a
+    screen reader announces "button" and nothing else."""
+    profile = JS["profile.js"].lower()
+    assert f'aria-label="edit your {label}"' in profile or \
+           f'aria-label="change your {label}"' in profile
+
+
+def test_an_icon_is_hidden_from_screen_readers() -> None:
+    """Beside a label it would be read twice; alone, its button carries the name."""
+    assert 'aria-hidden="true"' in JS["ui.js"]
+
+
+def test_your_own_reports_open_rather_than_showing_everything_at_once() -> None:
+    profile = JS["profile.js"]
+    assert 'class="disc"' in profile
+    assert 'aria-expanded="false"' in profile
+    assert "aria-controls=" in profile, "the button must name the panel it opens"
+
+
+def test_the_chevron_turns_instead_of_being_swapped() -> None:
+    """So the control keeps its identity through the change."""
+    assert re.search(r'\.disc__head\[aria-expanded="true"\] \.chev\s*\{[^}]*rotate', CSS)
+
+
+def test_a_title_and_the_line_under_it_are_actually_stacked() -> None:
+    """`.t` and `.m` are a pair used all over the app — a name and its detail, a type and
+    its timestamp, a corridor and its description.
+
+    They were inline spans, so they ran together on one line wherever the parent did not
+    happen to be a flex column, and `.m`'s `margin-top` did nothing at all, because
+    margins do not apply vertically to an inline box. It looked correct in the places a
+    flex parent forced a column and wrong everywhere else, which is why one bug arrived
+    three times as three unrelated complaints.
+    """
+    for selector in (r"\.t", r"\.m"):
+        rule = re.search(rf"^  {selector} \{{([^}}]*)\}}", CSS, re.M)
+        assert rule, f"{selector} has no rule"
+        assert "display:block" in rule.group(1).replace(" ", ""), (
+            f"{selector} is inline, so it will run into the line beside it"
+        )
+
+
+def test_the_pair_is_used_the_same_way_everywhere() -> None:
+    """A meta line always follows a title. If one view used them side by side, making
+    them block would break that view — so check the assumption rather than assume it."""
+    users = [
+        (name, line)
+        for name, source in JS.items()
+        for line in source.splitlines()
+        if 'class="t"' in line
+    ]
+    assert len(users) >= 8, "no uses found; this test would pass vacuously"
+    for name, line in users:
+        assert 'class="m"' not in line, (
+            f"{name} puts a title and its meta line on one line: {line.strip()}"
+        )
+
+
+def test_evidence_is_fetched_only_when_a_report_is_opened() -> None:
+    """Twenty-five reports would otherwise be twenty-five requests nobody asked for, on a
+    connection this system assumes is bad."""
+    profile = JS["profile.js"]
+    assert "loadEvidence" in profile
+    assert "dataset.loaded" in profile, "opening and closing would ask again each time"
+    assert "/attachments" in profile
