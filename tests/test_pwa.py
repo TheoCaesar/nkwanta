@@ -42,10 +42,18 @@ def test_the_app_is_reachable(client: TestClient) -> None:
     assert "Nkwanta" in r.text
 
 
-def test_the_original_page_still_works(client: TestClient) -> None:
-    """Both interfaces run side by side until the rebuild is proven live. A graded
-    deployment should never be one bad commit from having nothing to show."""
-    assert client.get("/").status_code == 200
+def test_the_application_is_at_the_root(client: TestClient) -> None:
+    """It was at `/app`, beside the original single page, until the rebuild was proven —
+    a graded deployment should never be one bad commit from having nothing to show. It is
+    proven, so it has the root and the old page is retired (D-045).
+
+    Retirement is covered in `test_web_page.py`; this is the half that matters to the PWA
+    — the manifest, the worker scope and the served document must all agree on one
+    address, and at the root they agree by construction."""
+    root = client.get("/")
+    assert root.status_code == 200
+    assert "Nkwanta" in root.text
+    assert MANIFEST["scope"] == "/"
 
 
 @pytest.mark.parametrize(
@@ -162,6 +170,21 @@ def test_a_stale_response_is_labelled_as_stale() -> None:
     """The interface says "showing what was last loaded" rather than pretending the data
     is current. That requires the worker to mark it."""
     assert "X-Nkwanta-Cached" in SW
+
+
+def test_the_worker_takes_the_scope_that_covers_the_page() -> None:
+    """It registered `/static/app/sw.js` with scope `/static/app/` while the page lived at
+    `/app` — outside it. The worker installed, cached the shell, and controlled nothing.
+    Offline never worked and nothing said so."""
+    assert 'register("/sw.js", { scope: "/" })' in JS["app.js"]
+
+
+def test_the_document_itself_is_cached_so_the_app_opens_offline() -> None:
+    """Root scope is what makes this possible at all — before it, the worker never saw a
+    navigation request. One entry suffices: routing is by hash, so every address in the
+    application is the same document."""
+    assert '"/",' in SW, "the document is not in the shell cache"
+    assert 'request.mode === "navigate"' in SW
 
 
 def test_every_shell_file_listed_actually_exists() -> None:

@@ -25,12 +25,15 @@
  *
  * It sat at v1 through the whole build, which is a deployment bug, not a caching policy.
  */
-const VERSION = "v3-2026-08-14";
+const VERSION = "v4-2026-08-14-root";
 const SHELL = `nkwanta-shell-${VERSION}`;
 const DATA = `nkwanta-data-${VERSION}`;
 
 const SHELL_FILES = [
-  "/static/app/",
+  // The document itself, at the address the manifest starts from. This used to be
+  // "/static/app/", which was never a route — `cache.add` failed on it silently every
+  // install, and `Promise.allSettled` below is why nobody noticed.
+  "/",
   "/static/app/index.html",
   "/static/app/css/app.css",
   "/static/app/js/app.js",
@@ -102,6 +105,16 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(cacheFirst(request));
     return;
   }
+
+  // The document itself. Now that the worker has root scope it controls the page, which
+  // is the whole point of installing it — served from cache so the app opens with no
+  // connection, and revalidated behind the response so a deploy still lands.
+  //
+  // One entry is enough: routing is by hash, so every address in the application is the
+  // same document and hash changes never reach the network.
+  if (request.mode === "navigate") {
+    event.respondWith(cacheFirst(new Request("/", { credentials: "same-origin" })));
+  }
 });
 
 /** Fresh data when possible; the last copy when not. */
@@ -144,6 +157,6 @@ async function cacheFirst(request) {
     if (res.ok) (await caches.open(SHELL)).put(request, res.clone());
     return res;
   } catch {
-    return caches.match("/static/app/index.html");
+    return (await caches.match("/")) ?? (await caches.match("/static/app/index.html"));
   }
 }

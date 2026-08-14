@@ -9,6 +9,53 @@ Format: what was decided, what else was considered, why, and what it costs.
 
 ---
 
+## 14 August 2026 — retiring the first interface
+
+### D-045 — The application takes the root; the original page is retired
+
+**Decided:** `/` serves the progressive web application. `/app` becomes a permanent
+redirect to it. The original single page is removed from the routing table. The manifest's
+`id`, `start_url` and `scope` all become `/`, and the service worker is registered from
+`/sw.js` with scope `/`.
+
+**Considered:** leaving both running, which is the status quo; and moving the application
+to `/` while keeping the old page at `/legacy`.
+
+**Why:** The old page existed for one reason, recorded at the time — a graded deployment
+should never be one bad commit from having nothing to show. That was right while the
+rebuild was unproven. It is proven, and a second interface now costs more than it insures:
+it is a second thing an examiner might land on, and it is tested, maintained and shipped
+for no remaining purpose.
+
+**Moving to the root was not tidiness. It fixed two silent faults**, both found while
+making this change rather than by anything failing:
+
+1. **The installed application would have opened a 404.** The manifest's `start_url` and
+   `scope` were `/static/app/`, which was never a route — the static mount serves files,
+   not directory indexes. `GET /static/app/` returns 404 today. It was also listed in the
+   worker's shell files, where `cache.add` failed on it at every install; the
+   `Promise.allSettled` that tolerates a missing file is why nobody noticed.
+
+2. **The service worker controlled nothing.** It was registered as `/static/app/sw.js`
+   with scope `/static/app/`, while the page it registered from was at `/app` — outside
+   that scope. A worker only controls clients within its scope, so it installed
+   successfully, cached the shell, and was never consulted. **Offline has never worked in
+   production, and no test could see it**, because every test asserted the worker's
+   *contents* rather than its reach.
+
+Both faults are the same shape: a scope may not sit above the file that declares it, and
+three separate places — the route, the manifest and the registration — had to agree on one
+address. At the root they agree by construction and there is nothing left to keep in step.
+That is the real argument for the move.
+
+**Costs.** The fallback is gone: a bad commit now takes the whole front end, where before
+one interface survived. Mitigated by the redirect, by 472 tests, and by the fact that the
+insurance was only ever worth having while the replacement was unproven. `web/index.html`
+and its tests remain in the repository until removed with `git rm`; nothing routes to
+either.
+
+---
+
 ## 14 August 2026 — the signed-out map
 
 ### D-044 — A signed-out visitor sees the road, not the people

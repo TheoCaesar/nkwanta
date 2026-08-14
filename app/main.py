@@ -15,8 +15,8 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, status
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
@@ -96,29 +96,36 @@ def create_app() -> FastAPI:
 
     # Served by FastAPI directly. There is no separate front-end host — see D-012.
     #
-    # Two interfaces exist at once, deliberately:
+    # The application is at the root. The original single page has been retired (D-045):
+    # it existed so that a graded deployment always had something that worked while the
+    # rebuild was unproven, and the rebuild is now proven.
     #
-    #   /      the original single page, kept working while the rebuild is proven
-    #   /app   the progressive web application (D-036, D-037)
-    #
-    # Running them side by side means a graded deployment always has something that
-    # works. The old page is retired once the new one has been exercised live.
+    # Putting it at `/` is not tidiness. The service worker and the manifest both need a
+    # scope, a scope may not sit above the file it is declared in, and `/app` under a
+    # scope of `/static/app/` meant **the worker controlled nothing and the installed app
+    # opened a 404** — `/static/app/` was never a route. At the root the three agree by
+    # construction and there is nothing left to keep in step.
     if WEB_DIR.is_dir():
         app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
         @app.get("/", include_in_schema=False)
         async def index() -> FileResponse:
-            return FileResponse(WEB_DIR / "index.html")
+            return FileResponse(WEB_DIR / "app" / "index.html")
 
         @app.get("/app", include_in_schema=False)
-        async def pwa() -> FileResponse:
-            return FileResponse(WEB_DIR / "app" / "index.html")
+        async def pwa_moved() -> RedirectResponse:
+            """Kept as a redirect, not deleted.
+
+            `/app` has been the address for two days. It is in the deployment links file,
+            in browser history, and possibly in an examiner's notes. A permanent redirect
+            costs one route; a dead link costs a mark."""
+            return RedirectResponse("/", status_code=status.HTTP_308_PERMANENT_REDIRECT)
 
         @app.get("/sw.js", include_in_schema=False)
         async def service_worker() -> FileResponse:
-            # A service worker may only control paths at or below its own URL. Serving
-            # it from the root as well means it can be given root scope later without
-            # moving any files.
+            # A service worker may only control paths at or below its own URL, so serving
+            # it from the root is what allows a scope of "/" — which is what lets it
+            # control the application page at all.
             return FileResponse(
                 WEB_DIR / "app" / "sw.js",
                 media_type="application/javascript",

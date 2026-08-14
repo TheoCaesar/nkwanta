@@ -9,6 +9,56 @@ what comes next.
 
 ---
 
+## 14 August 2026 — Session 24: the app takes the root, and two silent faults
+
+### What happened
+
+Retired the original single page and moved the application to `/` — **D-045**. `/app` is
+now a 308 redirect, because it has been the address for two days and is in the deployment
+links file.
+
+**The move fixed two faults nobody had noticed, and neither could have failed loudly.**
+
+**The installed app would have opened a 404.** The manifest's `start_url` and `scope` were
+`/static/app/` — never a route. The static mount serves files, not directory indexes;
+`GET /static/app/` returns 404 today. It was also in the worker's shell file list, where
+`cache.add` failed on it at every single install. The `Promise.allSettled` that tolerates
+one missing file — added deliberately, so an install never fails wholesale — is exactly
+why nobody noticed.
+
+**The service worker controlled nothing.** Registered as `/static/app/sw.js` with scope
+`/static/app/`, from a page at `/app`, which is outside that scope. A worker only controls
+clients within its scope. It installed, cached the shell, and was never once consulted.
+**Offline has never worked in production.** Every test asserted what the worker *contained*
+and none asserted what it *reached*, so the suite was green throughout.
+
+Both are the same shape: a scope may not sit above the file declaring it, and three places
+— route, manifest, registration — had to agree on one address. At the root they agree by
+construction. That, not tidiness, is the argument for the move.
+
+Also added: the worker now caches the document itself and handles navigation requests,
+which only became possible once it had root scope.
+
+### Tests
+
+**472 passing.** Down from 478, and honestly so: `test_web_page.py` had twelve tests of a
+page that no longer exists. It is now six tests that the retirement holds — the root serves
+the application, `/app` redirects, nothing routes to the old file, the manifest starts
+somewhere real, and the worker's scope covers the page it registers from.
+
+The fourth instance of a familiar failure: a test grepping for `/static/app/sw.js` matched
+the comment explaining why that path was wrong. **Tests that read source text also read the
+prose.** Narrowed to the call form.
+
+### Left on disk
+
+`web/index.html` and `tests/test_web_page.py` are still in the repository — deletion was
+declined at the prompt. Nothing routes to either. Remove with:
+
+    git rm web/index.html tests/test_web_page.py
+
+---
+
 ## 14 August 2026 — Session 23: a race in five tests, not in the system
 
 ### What happened

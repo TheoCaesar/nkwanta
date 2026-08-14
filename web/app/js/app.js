@@ -188,7 +188,13 @@ async function installServiceWorker() {
     return;
   }
 
-  navigator.serviceWorker.register("/static/app/sw.js", { scope: "/static/app/" })
+  /* Registered from the root, with root scope.
+   *
+   * It was `/static/app/sw.js` scoped to `/static/app/`, and the page was at `/app` —
+   * outside that scope. A worker only controls clients within its scope, so it installed
+   * successfully, cached the shell, and controlled nothing. Offline never worked, and
+   * nothing failed loudly enough to say so. See D-045. */
+  navigator.serviceWorker.register("/sw.js", { scope: "/" })
     .catch(() => {/* the app works without it, just not offline */});
 }
 
