@@ -621,6 +621,79 @@ def test_the_chevron_turns_instead_of_being_swapped() -> None:
     assert re.search(r'\.disc__head\[aria-expanded="true"\] \.chev\s*\{[^}]*rotate', CSS)
 
 
+# =============================================================================
+# THE SIGNED-OUT SHELL
+#
+# The server-side half of this is test_public_map.py. These are about the interface not
+# offering what the API would refuse — and not being the thing that enforces it.
+# =============================================================================
+
+
+def test_there_is_no_navigation_at_all_when_signed_out() -> None:
+    """It used to show two tabs — Map, and Sign in. That is a navigation bar whose every
+    item is either where you already are or what the appbar button already does."""
+    app_js = JS["app.js"]
+    assert 'classList.toggle("signedOut"' in app_js
+    assert re.search(r"#app\.signedOut \.tabbar\s*\{[^}]*display:none", CSS), (
+        "an empty <nav> still holds its height and border — a stripe of nothing"
+    )
+
+
+def test_the_signed_out_map_has_no_list_beneath_it() -> None:
+    """The list is a table of things the visitor cannot open."""
+    assert "auth.signedIn" in JS["map.js"]
+    assert "const open = !auth.signedIn" in JS["map.js"]
+
+
+def test_the_teaser_answers_before_it_asks() -> None:
+    """What is blocking the road comes first and costs nothing. Only then does it say
+    what an account adds."""
+    teaser = JS["map.js"]
+    assert "teaserHtml" in teaser
+    body = teaser[teaser.index("function teaserHtml") : teaser.index("function detailHtml")]
+    assert "TYPE_LABEL" in body, "the visitor must be told what it is"
+    assert "last_reported_at" in body, "and how long ago"
+    assert "Sign in" in body
+    # Named, not vague. "Sign in for more" asks somebody to pay for an unnamed thing.
+    assert "Photographs" in body and "reliable" in body
+
+
+def test_the_teaser_never_renders_gated_fields() -> None:
+    """Belt and braces: the API withholds these, so the teaser reading them would render
+    "null%" rather than leak anything — but a template that reaches for a field it must
+    not have is one schema change away from showing it."""
+    teaser = JS["map.js"]
+    body = teaser[teaser.index("function teaserHtml") : teaser.index("function detailHtml")]
+    for field in ("confidence", "report_count", "evidence", "reputation"):
+        assert field not in body, f"the teaser reads {field}"
+
+
+def test_markers_fall_back_to_status_when_the_score_is_withheld() -> None:
+    """Pin size followed confidence, which a signed-out visitor is not given. The three
+    statuses are that score banded at 0.35 and 0.70 — the same grammar, three steps."""
+    assert re.search(r"open\s*\n?\s*\?\s*\(\{ reported:", JS["map.js"]), (
+        "signed out, size must come from status rather than a field that is null"
+    )
+
+
+def test_create_an_account_lands_on_the_register_tab() -> None:
+    """Arriving on the sign-in form and then having to find the right tab is a step that
+    exists for no reason."""
+    assert '"/register"' in JS["app.js"]
+    assert 'start: "register"' in JS["app.js"]
+    assert 'href="#/register"' in JS["map.js"]
+
+
+def test_the_register_tab_is_opened_by_the_same_handler_a_tap_would_use() -> None:
+    """One code path into register mode, rather than a second that has to be kept in
+    step with the first."""
+    auth_js = JS["auth.js"]
+    assert '[data-mode="register"]\').click()' in auth_js
+    click = auth_js.index('[data-mode="register"]\').click()')
+    listener = auth_js.index('mount.querySelectorAll("[data-mode]")')
+    assert listener < click, "the click fires before the listener exists"
+
+
 def test_a_title_and_the_line_under_it_are_actually_stacked() -> None:
     """`.t` and `.m` are a pair used all over the app — a name and its detail, a type and
     its timestamp, a corridor and its description.

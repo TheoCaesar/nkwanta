@@ -141,6 +141,13 @@
   .tabbar a[aria-current="page"], .tabbar a.fab[aria-current="page"] {
     background:var(--green-100);
   }
+  /* Signed out there is no navigation, on either shape of screen — D-044.
+   *
+   * `display:none` rather than an empty bar: an empty <nav> keeps its height and its
+   * border, which leaves a stripe of nothing along the bottom of a phone and a blank
+   * 216px column down the side of a desktop. */
+  #app.signedOut .tabbar { display:none }
+
   .tabbar .badge {
     position:absolute; transform:translate(12px,-6px); background:var(--red); color:#fff;
     font-size:9px; min-width:15px; height:15px; border-radius:var(--r-pill);
@@ -248,6 +255,30 @@
    * through the change — and `aria-expanded` on the button is what a screen reader
    * reads, independently of which way the arrow happens to point.
    */
+  /* ------------------------------------------------- the signed-out map furniture
+   *
+   * Both float over the map rather than taking a row of their own. Screen space on a
+   * phone is the scarcest thing here, and the map is the content — chrome that pushes it
+   * smaller to describe it is chrome that has misunderstood its job. */
+  .mapchip {
+    position:absolute; left:var(--s3); right:var(--s3); bottom:calc(var(--s3) + env(safe-area-inset-bottom));
+    background:var(--card); border-radius:var(--r-md); padding:var(--s3);
+    box-shadow:var(--lift-1); z-index:2; pointer-events:none;
+  }
+  .maplegend {
+    position:absolute; left:var(--s3); top:var(--s3); z-index:2;
+    background:color-mix(in srgb, var(--card) 92%, transparent);
+    border-radius:var(--r-sm); padding:6px var(--s2);
+    display:flex; gap:var(--s3); font-size:10px; color:var(--muted); pointer-events:none;
+  }
+
+  /* What signing in would add. Tinted rather than bordered: a box that looks like a form
+     field invites a tap that does nothing. */
+  .locked {
+    background:var(--grey-100); border-radius:var(--r-sm);
+    padding:var(--s3); margin-top:var(--s4);
+  }
+
   .disc { border:1px solid var(--hair); border-radius:var(--r-sm); background:var(--card) }
   .disc + .disc { margin-top:var(--s2) }
   .disc__head {

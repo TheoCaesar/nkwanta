@@ -138,6 +138,7 @@ const ICONS = {
   pencil:'<path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3Z"/><path d="m14.5 6.5 3 3"/>',
   key:'<circle cx="8" cy="12" r="4"/><path d="M12 12h9M18 12v4M15.5 12v3"/>',
   chevron:'<path d="m6 9 6 6 6-6"/>',
+  lock:'<rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>',
   image:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="m4 17 5-4.5L14 17l3-2.5 3 2.5"/>',
   wifi_off:'<path d="M3 3l18 18"/><path d="M8.5 16.4a5 5 0 0 1 7 0M5 12.9a10 10 0 0 1 3-2M19 12.9a10 10 0 0 0-7-2.8"/><path d="M12 20h.01"/>',
 };

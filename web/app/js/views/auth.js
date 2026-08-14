@@ -10,8 +10,11 @@ import { go } from "../router.js";
 import { loadUser, refreshAll } from "../store.js";
 import { esc, icon, rules, toast, validate } from "../ui.js";
 
-export default function authView(mount) {
-  let mode = "login";
+/* `start` lets a caller land on the register tab directly — the "Create an account"
+ * button on the signed-out map means it, and making somebody arrive on the sign-in form
+ * and then find the right tab is a step that exists for no reason. */
+export default function authView(mount, { start = "login" } = {}) {
+  let mode = start;
 
   mount.innerHTML = `
     <div class="scroll pad">
@@ -81,6 +84,11 @@ export default function authView(mount) {
       v = wire();
     });
   });
+
+  // After the listeners exist, not before — the tab is switched by firing the same
+  // handler a tap would, so there is one code path for entering register mode rather
+  // than a second that has to be kept in step with it.
+  if (mode === "register") mount.querySelector('[data-mode="register"]').click();
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();

@@ -30,6 +30,8 @@ router.setRoleProvider(role);
 
 router.define("/",         { render: mapView,      title: "Nkwanta — map" });
 router.define("/signin",   { render: authView,     title: "Nkwanta — sign in" });
+router.define("/register", { render: (m) => authView(m, { start: "register" }),
+                             title: "Nkwanta — create account" });
 router.define("/report",   { render: reportView,   title: "Nkwanta — report", roles: ["commuter","warden","officer","admin"] });
 router.define("/alerts",   { render: alertsView,   title: "Nkwanta — alerts", roles: ["commuter","warden","officer","admin"] });
 router.define("/routes",   { render: routesView,   title: "Nkwanta — routes", roles: ["commuter","warden","officer","admin"] });
@@ -51,8 +53,24 @@ const TABS = [
 
 function drawTabs() {
   const current = router.currentPath();
-  const r = role();
 
+  /* Signed out, there is no navigation at all — D-044.
+   *
+   * It previously showed two tabs, Map and Sign in, which is a navigation bar whose
+   * every item is either where you already are or the thing the appbar button already
+   * does. Before that it showed five, four of which would bounce you to a sign-in page.
+   *
+   * A console with every item greyed out advertises a product the visitor cannot use.
+   * Removing it makes the map the page, which is what the map should have been: the
+   * front door, with one control on it.
+   *
+   * `signedOut` on the shell is what collapses the bar, rather than emptying it — an
+   * empty <nav> still holds its height and its border, leaving a stripe of nothing
+   * along the bottom of the screen. */
+  document.getElementById("app").classList.toggle("signedOut", !auth.signedIn);
+  if (!auth.signedIn) { tabs.innerHTML = ""; return; }
+
+  const r = role();
   tabs.innerHTML = TABS
     .filter(t => router.allowed(t.path, r))
     .map(t => {
@@ -63,14 +81,6 @@ function drawTabs() {
                 ${count ? `<span class="badge">${count > 9 ? "9+" : count}</span>` : ""}
               </a>`;
     }).join("");
-
-  // Signed out, the only navigation offered is the map and a way in. A tab bar of
-  // things that would bounce you to a sign-in page is worse than no tab bar.
-  if (!auth.signedIn) {
-    tabs.innerHTML = `
-      <a href="#/" ${current === "/" ? 'aria-current="page"' : ""}>${icon("map",20)}<span>Map</span></a>
-      <a href="#/signin" class="fab">${icon("user",20)}<span>Sign in</span></a>`;
-  }
 }
 
 function drawActions() {

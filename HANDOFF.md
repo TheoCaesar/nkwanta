@@ -9,6 +9,79 @@ what comes next.
 
 ---
 
+## 14 August 2026 — Session 21: the signed-out map, built as designed
+
+### What happened
+
+Built §3 of `ui-designs.html`, designed in the previous exchange and approved before any
+code was written. **D-044.**
+
+### The gate is in the API, not the interface
+
+This is the part that matters. A gate the client draws is a gate anybody opens with curl,
+so the withholding happens in `app/routers/incidents.py`:
+
+| Field | Signed out | Why |
+|---|---|---|
+| `incident_type`, position, `status`, timestamps | shown | The road, not a person. The promise in `02-problem-and-scope.md`. |
+| `confidence` | `None` | A function of who reported it and how reliable each has been. Publishing it publishes a summary of their credibility. |
+| `report_count` | `None` | The size of the group the score came from. Withholding the score and publishing its group concedes half the point. |
+| `evidence` | `[]` | Names, credibility, photographs, recordings. NFR-4a, D-029, D-042. |
+
+`status` stays deliberately: it is the score banded at 0.35 and 0.70, so a commuter gets
+the conclusion without the working.
+
+Two details worth defending in a viva. **The evidence rows are dropped before the
+attachment query runs**, not filtered after it — so the bytes are never loaded and no
+signed URL is ever minted, and there is nothing in the response to leak by accident.
+And **`None`, never `0.0`**: a zero score is a real state, an incident decayed to nothing,
+and a client that renders "0%" for "not told" is showing a fact the server never asserted.
+There is a test for exactly that confusion.
+
+### The interface
+
+- **No navigation at all when signed out.** It previously showed two tabs, Map and Sign
+  in — a navigation bar whose every item is either where you already are or what the
+  appbar button already does. Collapsed with a `signedOut` class rather than by emptying
+  the `<nav>`, because an empty one keeps its height and border: a stripe of nothing along
+  the bottom of a phone and a blank 216px column down a desktop.
+- **The map is the page.** No list beneath it, since the list is a table of things the
+  visitor cannot open. A floating count and legend sit over the map rather than taking a
+  row from it.
+- **Markers size by status when signed out**, because the field they used to size by is
+  now null. The design said "size follows accuracy" and that was not implementable under
+  the gate the same design imposed — caught while building, and the three statuses give
+  the same visual grammar at three steps instead of continuous.
+- **The teaser answers before it asks.** Type, status and how long ago, then a named list
+  of what an account adds. Named rather than vague: "sign in for more" asks somebody to
+  pay a price for an unspecified thing.
+- **"Create an account" lands on the register tab**, via a new `/register` route. It
+  switches tab by firing the same handler a tap would, so there is one code path into
+  register mode rather than a second to keep in step.
+
+### Tests
+
+**448 passing**, up from 428. A new `test_public_map.py` — thirteen tests on the server
+gate — plus seven in `test_pwa.py` on the shell.
+
+The interface tests deliberately do not test that the teaser *hides* anything. They test
+that it never *reads* a gated field, because the hiding is the API's job and a template
+reaching for a field it must not have is one schema change from showing it.
+
+Also ran a rendering smoke check outside pytest: both branches of the map template
+evaluated with stubs and parsed for balance. `node --check` proves the JavaScript is
+valid, which is not the same as the HTML being closed.
+
+### What is unresolved
+
+- Nothing pushed since session 14. Seven sessions.
+- Clearance still has no integration test.
+- The five submission PDFs are still unassembled.
+- `docs/design/ui-designs.html` §3 still says pin size follows accuracy on the signed-out
+  map. The build corrected this to status; the design should be amended to match.
+
+---
+
 ## 14 August 2026 — Session 20: three components instead of nine copies
 
 ### What happened

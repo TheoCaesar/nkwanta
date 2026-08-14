@@ -51,16 +51,24 @@ from app.services.attachments import may_play
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
 
-def _to_response(incident: Incident) -> IncidentResponse:
+def _to_response(incident: Incident, viewer: User | None = "staff") -> IncidentResponse:  # noqa: ARG001
+    """`viewer` of `None` means a signed-out visitor, and strips the two fields that
+    describe the people rather than the road — see D-044 and the note on the schema.
+
+    The default is the permissive one because every other caller of this function is
+    already behind a role guard. Making the public route pass its viewer explicitly puts
+    the decision at the one place it actually varies.
+    """
+    public = viewer is None
     point = to_shape(incident.centroid)
     return IncidentResponse(
         id=incident.id,
         incident_type=incident.incident_type,
         latitude=point.y,
         longitude=point.x,
-        confidence=incident.confidence,
+        confidence=None if public else incident.confidence,
         status=incident.status,
-        report_count=incident.report_count,
+        report_count=None if public else incident.report_count,
         first_reported_at=incident.first_reported_at,
         last_reported_at=incident.last_reported_at,
         assigned_to_id=incident.assigned_to_id,
@@ -71,6 +79,7 @@ def _to_response(incident: Incident) -> IncidentResponse:
 @router.get("", response_model=list[IncidentResponse], summary="Current incidents — the map feed")
 async def list_incidents(
     session: Annotated[AsyncSession, Depends(get_session)],
+    viewer: OptionalUser = None,
     incident_type: IncidentType | None = None,
     min_confidence: Annotated[float, Query(ge=0.0, le=1.0)] = THRESHOLD_STALE,
     limit: Annotated[int, Query(ge=1, le=500)] = 200,
@@ -80,6 +89,10 @@ async def list_incidents(
     Faded incidents are excluded by default rather than deleted. Nobody closes an
     incident here — confidence decays and it drops below `min_confidence` on its own.
     Set `min_confidence=0` to see everything, including what has aged out.
+
+    A signed-out visitor gets every incident, with `confidence` and `report_count`
+    withheld — D-044. The filtering and ordering still use the real score, so the map is
+    the same map; only the arithmetic behind it is private.
     """
     stmt = (
         select(Incident)
@@ -91,7 +104,7 @@ async def list_incidents(
     if incident_type is not None:
         stmt = stmt.where(Incident.incident_type == incident_type)
 
-    return [_to_response(i) for i in await session.scalars(stmt)]
+    return [_to_response(i, viewer) for i in await session.scalars(stmt)]
 
 
 @router.get(
@@ -147,6 +160,16 @@ async def get_incident(
         )
     ).all()
 
+    # A signed-out visitor is told what is blocking the road and nothing about who said
+    # so — D-044. The rows are dropped here, at the source, rather than hidden by the
+    # interface: a gate the client draws is a gate anybody can open with curl.
+    #
+    # Skipping the attachment query for them is not an optimisation. It means the bytes
+    # are never loaded and no signed URL is ever minted, so there is nothing in the
+    # response to leak even by accident.
+    if viewer is None:
+        rows = []
+
     # One query for every attachment on every contributing report, rather than one per
     # report. Each is then filtered by `may_play`, so an unshared recording is invisible
     # rather than listed and then refused.
@@ -162,7 +185,7 @@ async def get_incident(
 
     reports_by_id = {report.id: report for _, report, _ in rows}
 
-    base = _to_response(incident)
+    base = _to_response(incident, viewer)
     return IncidentDetailResponse(
         **base.model_dump(),
         evidence=[

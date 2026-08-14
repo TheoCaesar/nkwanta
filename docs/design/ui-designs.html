@@ -93,6 +93,8 @@
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
   <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5-11-6.5Z"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 13 4.5 4.5L19 7"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z"/><circle cx="12" cy="12" r="2.8"/></symbol>
 </svg>
 
 <div class="sheet">
@@ -197,7 +199,321 @@ rather than a feature that ran out of time.</p>
   <tr><td>Disabled</td><td>Submit stays disabled until required fields validate, with the reason stated</td></tr>
 </table>
 
-<h2>3. Commuter — mobile, installable</h2>
+<h2>3. Arriving signed out</h2>
+
+<p>The map is the front door. Somebody who has been sent a link, or who has just heard that
+Spintex is flooded, should reach it with nothing between them and the answer — no account,
+no navigation to learn, no empty tabs for features they cannot use.</p>
+
+<p>So a signed-out visitor gets no sidebar and no bottom bar. Four of the five destinations
+would refuse them anyway; showing four locked doors and one open one is a worse first
+impression than showing one room. The map fills the screen and the only control is
+<b>Sign in</b>.</p>
+
+<div class="note">
+  <b>This narrows an earlier decision, and the narrowing needs stating.</b>
+  <code>02-problem-and-scope.md</code> says the map is open to everyone because a commuter
+  checking the road ahead should not have to create an account first. That promise is kept:
+  <b>what is blocking the road, where, and how long ago</b> stay visible without an account.
+  What now needs one is everything about the <em>people</em> — who reported it, what they
+  photographed or recorded, and the accuracy score built from their credibility. Those were
+  never the commuter's promise; they are the working material of the control room, and each
+  one identifies a reporter. Recorded as D-044.
+</div>
+
+<div class="grid g3">
+
+  <div>
+    <div class="phone"><div class="screen">
+      <div style="padding:9px 10px;display:flex;justify-content:space-between;align-items:center;
+                      background:#fff;border-bottom:1px solid var(--hair);flex:none;z-index:2">
+            <div style="font-size:12.5px;font-weight:600;color:var(--ink);letter-spacing:-.01em">Nkwanta</div>
+            <div style="display:flex;gap:5px;align-items:center">
+              <span style="font-size:9px;color:var(--green);border:1px solid var(--green);
+                           border-radius:11px;padding:3px 9px;font-weight:500">Sign in</span>
+            </div>
+          </div>
+      <div style="flex:1;position:relative;min-height:0">
+        <svg viewBox="0 0 200 200" preserveAspectRatio="xMidYMid slice" style="width:100%;height:100%;display:block">
+            <rect width="200" height="200" fill="#E8EEEA"/>
+            <path d="M-5 62 L205 76" stroke="#CBD6CF" stroke-width="9" fill="none"/>
+            <path d="M74 -5 L90 205" stroke="#CBD6CF" stroke-width="9" fill="none"/>
+            <path d="M-5 146 L205 134" stroke="#D8E0DA" stroke-width="6" fill="none"/>
+            <path d="M-5 178 L205 190" stroke="#D8E0DA" stroke-width="5" fill="none"/>
+            <path d="M150 -5 L160 205" stroke="#D8E0DA" stroke-width="5" fill="none"/>
+            <path d="M20 205 L60 60 L200 30" stroke="#DFE7E1" stroke-width="4" fill="none"/>
+            <circle cx="82" cy="70" r="20" fill="#C2453D" opacity=".13"/><circle cx="82" cy="70" r="8.5" fill="#C2453D" stroke="#fff" stroke-width="2"/>
+            <circle cx="156" cy="140" r="15" fill="#D9A406" opacity=".16"/><circle cx="156" cy="140" r="6.5" fill="#D9A406" stroke="#fff" stroke-width="2"/>
+            <circle cx="34" cy="120" r="11" fill="#8A968F" opacity=".18"/><circle cx="34" cy="120" r="5" fill="#8A968F" stroke="#fff" stroke-width="1.6"/>
+            <circle cx="120" cy="184" r="13" fill="#185FA5" opacity=".16"/><circle cx="120" cy="184" r="6" fill="#185FA5" stroke="#fff" stroke-width="1.8"/>
+            <circle cx="176" cy="52" r="11" fill="#8A968F" opacity=".18"/><circle cx="176" cy="52" r="5" fill="#8A968F" stroke="#fff" stroke-width="1.6"/>
+          </svg>
+        <div style="position:absolute;left:8px;right:8px;bottom:8px;background:#fff;
+                    border-radius:9px;padding:7px 9px;box-shadow:0 1px 6px rgba(0,0,0,.1)">
+          <div style="font-size:10px;font-weight:600;color:var(--ink)">5 incidents in Greater Accra</div>
+          <div style="font-size:8.5px;color:var(--muted);margin-top:1px">Tap a marker to see what is blocking the road</div>
+        </div>
+        <div style="position:absolute;left:8px;top:8px;background:rgba(255,255,255,.94);
+                    border-radius:7px;padding:5px 7px;display:flex;gap:7px;font-size:7.5px;color:var(--muted)">
+          <span><i style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#C2453D"></i> verified</span>
+          <span><i style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#D9A406"></i> corroborated</span>
+          <span><i style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#8A968F"></i> unconfirmed</span>
+        </div>
+      </div>
+    </div></div>
+    <div class="cap"><b>Home, signed out.</b> No sidebar, no tab bar — the map is the page.
+      Colour follows status and size follows it too, in three steps. <em>Amended during the
+      build:</em> this originally said size follows accuracy, which the gate on this same
+      page makes impossible — the score is withheld, so there is nothing to size by. The
+      three statuses are that score banded at 0.35 and 0.70, so the grammar survives at a
+      coarser grain. One control, and it is the one that matters.</div>
+  </div>
+
+  <div>
+    <div class="phone"><div class="screen">
+      <div style="padding:9px 10px;display:flex;justify-content:space-between;align-items:center;
+                      background:#fff;border-bottom:1px solid var(--hair);flex:none;z-index:2">
+            <div style="font-size:12.5px;font-weight:600;color:var(--ink);letter-spacing:-.01em">Nkwanta</div>
+            <div style="display:flex;gap:5px;align-items:center">
+              <span style="font-size:9px;color:var(--green);border:1px solid var(--green);
+                           border-radius:11px;padding:3px 9px;font-weight:500">Sign in</span>
+            </div>
+          </div>
+      <div style="height:150px;position:relative;flex:none;overflow:hidden">
+        <svg viewBox="0 0 200 200" preserveAspectRatio="xMidYMid slice" style="width:100%;height:100%;display:block">
+            <rect width="200" height="200" fill="#E8EEEA"/>
+            <path d="M-5 62 L205 76" stroke="#CBD6CF" stroke-width="9" fill="none"/>
+            <path d="M74 -5 L90 205" stroke="#CBD6CF" stroke-width="9" fill="none"/>
+            <path d="M-5 146 L205 134" stroke="#D8E0DA" stroke-width="6" fill="none"/>
+            <path d="M-5 178 L205 190" stroke="#D8E0DA" stroke-width="5" fill="none"/>
+            <path d="M150 -5 L160 205" stroke="#D8E0DA" stroke-width="5" fill="none"/>
+            <path d="M20 205 L60 60 L200 30" stroke="#DFE7E1" stroke-width="4" fill="none"/>
+            <circle cx="82" cy="70" r="20" fill="#C2453D" opacity=".13"/><circle cx="82" cy="70" r="8.5" fill="#C2453D" stroke="#fff" stroke-width="2"/>
+            <circle cx="156" cy="140" r="15" fill="#D9A406" opacity=".16"/><circle cx="156" cy="140" r="6.5" fill="#D9A406" stroke="#fff" stroke-width="2"/>
+            <circle cx="34" cy="120" r="11" fill="#8A968F" opacity=".18"/><circle cx="34" cy="120" r="5" fill="#8A968F" stroke="#fff" stroke-width="1.6"/>
+            <circle cx="120" cy="184" r="13" fill="#185FA5" opacity=".16"/><circle cx="120" cy="184" r="6" fill="#185FA5" stroke="#fff" stroke-width="1.8"/>
+            <circle cx="176" cy="52" r="11" fill="#8A968F" opacity=".18"/><circle cx="176" cy="52" r="5" fill="#8A968F" stroke="#fff" stroke-width="1.6"/>
+          </svg>
+        <div style="position:absolute;inset:0;background:rgba(13,21,18,.28)"></div>
+      </div>
+      <div style="background:#fff;border-radius:15px 15px 0 0;margin-top:-15px;flex:1;
+                  display:flex;flex-direction:column;min-height:0;position:relative;z-index:2">
+        <div style="width:26px;height:3px;background:#DDE5E0;border-radius:2px;margin:8px auto 9px"></div>
+        <div style="padding:0 11px 11px;overflow-y:auto">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px">
+            <div style="font-size:13px;font-weight:600;color:var(--ink)">Flooding</div>
+            <span class="tag t-amb">CORROBORATED</span>
+          </div>
+          <div style="font-size:9.5px;color:var(--muted);margin-top:2px">Spintex Road, near the toll · 22 minutes ago</div>
+
+          <div style="height:1px;background:var(--hair);margin:10px 0"></div>
+
+          <div style="display:flex;align-items:center;gap:5px;color:var(--faint);margin-bottom:7px">
+            <svg class="ico-sm"><use href="#i-lock"/></svg>
+            <span style="font-size:8.5px;letter-spacing:.05em;font-weight:600;text-transform:uppercase">Needs an account</span>
+          </div>
+          <div style="font-size:10px;color:var(--muted);line-height:1.75;padding-left:2px">
+            <div>Who reported it, and how reliable they are</div>
+            <div>Photographs and spoken reports</div>
+            <div>How accurate this is, and why</div>
+          </div>
+
+          <div style="background:var(--green);color:#fff;border-radius:7px;text-align:center;
+                      padding:8px;font-size:10.5px;font-weight:500;margin-top:12px">Sign in to see the detail</div>
+          <div style="border:1px solid var(--line);border-radius:7px;text-align:center;
+                      padding:8px;font-size:10.5px;color:var(--ink);margin-top:6px">Create an account</div>
+          <div style="font-size:8.5px;color:var(--faint);text-align:center;margin-top:8px;line-height:1.5">
+            An account also lets you report, and warns you about your own routes.
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <div class="cap"><b>Tapping a marker.</b> The answer to “what is blocking the road” is given
+      before anything is asked for. The lock lists what an account adds, in the visitor's terms
+      rather than the system's — not “evidence and confidence score” but “photographs” and
+      “how accurate this is”.</div>
+  </div>
+
+  <div>
+    <div class="phone"><div class="screen">
+      <div style="padding:9px 10px;display:flex;justify-content:space-between;align-items:center;
+                  background:#fff;border-bottom:1px solid var(--hair);flex:none">
+        <div style="font-size:12.5px;font-weight:600;color:var(--ink)">Nkwanta</div>
+        <div style="width:22px;height:22px;border-radius:50%;background:var(--green);color:#fff;
+                    font-size:8.5px;display:flex;align-items:center;justify-content:center;font-weight:500">AO</div>
+      </div>
+      <div style="height:110px;position:relative;flex:none;overflow:hidden">
+        <svg viewBox="0 0 200 200" preserveAspectRatio="xMidYMid slice" style="width:100%;height:100%;display:block">
+            <rect width="200" height="200" fill="#E8EEEA"/>
+            <path d="M-5 62 L205 76" stroke="#CBD6CF" stroke-width="9" fill="none"/>
+            <path d="M74 -5 L90 205" stroke="#CBD6CF" stroke-width="9" fill="none"/>
+            <path d="M-5 146 L205 134" stroke="#D8E0DA" stroke-width="6" fill="none"/>
+            <path d="M-5 178 L205 190" stroke="#D8E0DA" stroke-width="5" fill="none"/>
+            <path d="M150 -5 L160 205" stroke="#D8E0DA" stroke-width="5" fill="none"/>
+            <path d="M20 205 L60 60 L200 30" stroke="#DFE7E1" stroke-width="4" fill="none"/>
+            <circle cx="82" cy="70" r="20" fill="#C2453D" opacity=".13"/><circle cx="82" cy="70" r="8.5" fill="#C2453D" stroke="#fff" stroke-width="2"/>
+            <circle cx="156" cy="140" r="15" fill="#D9A406" opacity=".16"/><circle cx="156" cy="140" r="6.5" fill="#D9A406" stroke="#fff" stroke-width="2"/>
+            <circle cx="34" cy="120" r="11" fill="#8A968F" opacity=".18"/><circle cx="34" cy="120" r="5" fill="#8A968F" stroke="#fff" stroke-width="1.6"/>
+            <circle cx="120" cy="184" r="13" fill="#185FA5" opacity=".16"/><circle cx="120" cy="184" r="6" fill="#185FA5" stroke="#fff" stroke-width="1.8"/>
+            <circle cx="176" cy="52" r="11" fill="#8A968F" opacity=".18"/><circle cx="176" cy="52" r="5" fill="#8A968F" stroke="#fff" stroke-width="1.6"/>
+          </svg>
+        <div style="position:absolute;inset:0;background:rgba(13,21,18,.28)"></div>
+      </div>
+      <div style="background:#fff;border-radius:15px 15px 0 0;margin-top:-15px;flex:1;
+                  display:flex;flex-direction:column;min-height:0;position:relative;z-index:2">
+        <div style="width:26px;height:3px;background:#DDE5E0;border-radius:2px;margin:8px auto 9px"></div>
+        <div style="padding:0 11px 11px;overflow-y:auto">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px">
+            <div style="font-size:13px;font-weight:600;color:var(--ink)">Flooding</div>
+            <span class="tag t-amb">CORROBORATED</span>
+          </div>
+          <div style="font-size:9.5px;color:var(--muted);margin-top:2px">Spintex Road, near the toll · 22 minutes ago</div>
+
+          <div style="display:flex;align-items:center;gap:6px;margin:10px 0 3px">
+            <span style="font-size:8px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;min-width:44px">Accuracy</span>
+            <div class="bar" style="flex:1"><i style="width:55%;background:var(--amber)"></i></div>
+            <b style="font-size:11px;color:var(--ink)">55%</b>
+          </div>
+
+          <div style="font-size:8px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;margin:11px 0 5px">Who reported it</div>
+          <div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--hair)">
+            <div style="width:20px;height:20px;border-radius:50%;background:var(--blue-100);color:var(--blue);
+                        font-size:7.5px;display:flex;align-items:center;justify-content:center;font-weight:600;flex:none">KM</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:10px;font-weight:500;color:var(--ink)">Kofi Mensah</div>
+              <div style="font-size:8.5px;color:var(--muted)">credibility 71% · 22 min ago</div>
+            </div>
+            <span style="font-size:8px;color:var(--green)">note · 2 photos</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;padding:5px 0">
+            <div style="width:20px;height:20px;border-radius:50%;background:var(--amber-100);color:var(--amber-700);
+                        font-size:7.5px;display:flex;align-items:center;justify-content:center;font-weight:600;flex:none">AB</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:10px;font-weight:500;color:var(--ink)">Adjoa Boateng</div>
+              <div style="font-size:8.5px;color:var(--muted)">credibility 48% · 18 min ago</div>
+            </div>
+            <span style="font-size:8px;color:var(--green)">voice</span>
+          </div>
+        </div>
+      </div>
+      <div class="nav">
+        <a class="on"><svg class="ico"><use href="#i-map"/></svg>Map</a>
+        <a><svg class="ico"><use href="#i-bell"/></svg>Alerts</a>
+        <a><svg class="ico"><use href="#i-plus"/></svg>Report</a>
+        <a><svg class="ico"><use href="#i-route"/></svg>Routes</a>
+        <a><svg class="ico"><use href="#i-user"/></svg>You</a>
+      </div>
+    </div></div>
+    <div class="cap"><b>The same incident, signed in.</b> The tab bar appears, the lock is
+      replaced by what it was hiding, and nothing that <em>was</em> visible has moved. Signing in
+      adds; it never rearranges. A visitor who signs in from the card lands back on the same
+      card, opened.</div>
+  </div>
+
+</div>
+
+<h3>Where the line sits</h3>
+
+<table>
+  <tr><th>Shown to anyone</th><th>Needs an account</th><th>Why the line is here</th></tr>
+  <tr>
+    <td>Marker, position, status colour</td><td>—</td>
+    <td>This is the road, not a person. It is the whole promise of the public map.</td>
+  </tr>
+  <tr>
+    <td>Incident type and nearest landmark</td><td>—</td>
+    <td>“Flooding at Spintex” is the answer a commuter came for. Withholding it would make the map decorative.</td>
+  </tr>
+  <tr>
+    <td>How long ago it was last reported</td><td>—</td>
+    <td>A four-hour-old report and a four-minute-old one mean different things. Without it the marker is unreadable.</td>
+  </tr>
+  <tr>
+    <td>—</td><td>Reporter names and credibility</td>
+    <td>NFR-4a. A reporter is exposed by being named beside an incident they accused someone of.</td>
+  </tr>
+  <tr>
+    <td>—</td><td>Photographs and recordings</td>
+    <td>A recording carries a voice; a photograph can catch a plate or a face. D-029, D-042.</td>
+  </tr>
+  <tr>
+    <td>—</td><td>Accuracy score and its working</td>
+    <td>It is built entirely from who reported it, so showing it in full leaks the thing above it.</td>
+  </tr>
+  <tr>
+    <td>—</td><td>Reporting, routes, alerts, dispatch</td>
+    <td>Each writes something or is addressed to somebody. All of them need an identity to mean anything.</td>
+  </tr>
+</table>
+
+<h3>Desktop, signed out</h3>
+
+<div class="desk" style="max-width:640px;margin:.6rem auto 0">
+  <div class="deskin" style="grid-template-columns:1fr;min-height:250px">
+    <div style="display:flex;flex-direction:column">
+      <div style="background:#fff;border-bottom:1px solid var(--hair);padding:9px 14px;
+                  display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:12px;font-weight:600;color:var(--ink)">Nkwanta</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="font-size:9.5px;color:var(--muted)">Greater Accra · live</span>
+          <span style="font-size:9.5px;color:#fff;background:var(--green);border-radius:11px;
+                       padding:4px 12px;font-weight:500">Sign in</span>
+        </div>
+      </div>
+      <div style="flex:1;position:relative;min-height:200px;overflow:hidden">
+        <svg viewBox="0 0 400 200" preserveAspectRatio="xMidYMid slice" style="width:100%;height:100%;display:block">
+          <rect width="400" height="200" fill="#E8EEEA"/>
+          <path d="M-5 70 L405 84" stroke="#CBD6CF" stroke-width="8" fill="none"/>
+          <path d="M150 -5 L168 205" stroke="#CBD6CF" stroke-width="8" fill="none"/>
+          <path d="M-5 150 L405 140" stroke="#D8E0DA" stroke-width="5" fill="none"/>
+          <path d="M290 -5 L300 205" stroke="#D8E0DA" stroke-width="5" fill="none"/>
+          <circle cx="160" cy="78" r="19" fill="#C2453D" opacity=".13"/><circle cx="160" cy="78" r="8" fill="#C2453D" stroke="#fff" stroke-width="2"/>
+          <circle cx="296" cy="146" r="14" fill="#D9A406" opacity=".16"/><circle cx="296" cy="146" r="6" fill="#D9A406" stroke="#fff" stroke-width="2"/>
+          <circle cx="64" cy="126" r="10" fill="#8A968F" opacity=".18"/><circle cx="64" cy="126" r="4.5" fill="#8A968F" stroke="#fff" stroke-width="1.5"/>
+          <circle cx="238" cy="188" r="12" fill="#185FA5" opacity=".16"/><circle cx="238" cy="188" r="5.5" fill="#185FA5" stroke="#fff" stroke-width="1.7"/>
+        </svg>
+        <div style="position:absolute;right:12px;top:12px;width:180px;background:#fff;border-radius:8px;
+                    box-shadow:0 1px 8px rgba(0,0,0,.11);padding:9px 10px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:5px">
+            <div style="font-size:11.5px;font-weight:600;color:var(--ink)">Accident</div>
+            <span class="tag t-red">VERIFIED</span>
+          </div>
+          <div style="font-size:9px;color:var(--muted);margin-top:2px">Kwame Nkrumah Circle · 4 min ago</div>
+          <div style="height:1px;background:var(--hair);margin:8px 0"></div>
+          <div style="display:flex;align-items:center;gap:5px;color:var(--faint)">
+            <svg class="ico-sm"><use href="#i-lock"/></svg>
+            <span style="font-size:8.5px">6 reports, photographs and accuracy</span>
+          </div>
+          <div style="background:var(--green);color:#fff;border-radius:6px;text-align:center;
+                      padding:6px;font-size:9.5px;font-weight:500;margin-top:8px">Sign in to see</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="cap" style="max-width:640px;margin:.5rem auto 0"><b>Desktop, signed out.</b> The
+  sidebar is absent rather than disabled — a console with every item greyed out advertises a
+  product the visitor cannot use. The detail arrives as a panel over the map instead of a
+  sheet, because a mouse has a cursor and does not need the thumb zone.</div>
+
+<h3>What this costs, honestly</h3>
+
+<p>A commuter who wants to know <em>how sure</em> the system is now has to sign in. That is a
+real loss, and it is the case against this design: 55% versus 88% is exactly the sort of thing
+that decides whether somebody leaves early, and it is now behind a wall.</p>
+
+<p>The defence is that the number cannot be separated from the people who produced it. It is
+a function of who reported the incident and how reliable each of them has been — publish it
+beside a marker and you have published a summary of their credibility to anybody with the
+link. The status tag carries the same information at a coarser grain: <em>corroborated</em>
+means several people independently, <em>verified</em> means enough that the police have been
+told. A commuter gets the judgement without the working.</p>
+
+<p>If that trade turns out to be wrong, the cheapest reversal is to show the tag and the
+score but never the reporters — the score is one field on a response that is already public.
+It is recorded that way in D-044 so the option stays open.</p>
+
+<h2>4. Commuter — mobile, installable</h2>
 
 <div class="grid g3">
   <div>
@@ -235,8 +551,8 @@ rather than a feature that ran out of time.</p>
       </div>
     </div></div>
     <div class="cap"><b>Map — home.</b> Pin size follows confidence, colour follows status. The sheet
-      is draggable; the report button is thumb-reachable and raised above the bar. Everything here
-      is readable signed out.</div>
+      is draggable; the report button is thumb-reachable and raised above the bar. This is the
+      <em>signed-in</em> map — a visitor without an account sees section 3.</div>
   </div>
 
   <div>
@@ -611,7 +927,7 @@ rather than a feature that ran out of time.</p>
   </div>
 </div>
 
-<h2>4. Warden — mobile</h2>
+<h2>5. Warden — mobile</h2>
 <div class="grid g3">
   <div>
     <div class="phone"><div class="screen">
@@ -655,7 +971,7 @@ rather than a feature that ran out of time.</p>
   </div>
 </div>
 
-<h2>5. Control room — desktop</h2>
+<h2>6. Control room — desktop</h2>
 
 <div class="desk"><div class="deskin">
   <div class="side">
@@ -735,7 +1051,7 @@ rather than a feature that ran out of time.</p>
   API and was previously invisible. This is the only place a warden or officer account comes into
   being, other than the seed script.</div>
 
-<h2>6. What each role sees</h2>
+<h2>7. What each role sees</h2>
 <table>
   <tr><th>View</th><th>Commuter</th><th>Warden</th><th>Officer</th><th>Admin</th></tr>
   <tr><td>Map and incident detail</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td></tr>
@@ -753,7 +1069,7 @@ rather than a feature that ran out of time.</p>
   showing something and then refusing it teaches people the interface lies to them.
 </div>
 
-<h2>7. Offline behaviour</h2>
+<h2>8. Offline behaviour</h2>
 <table>
   <tr><th>Situation</th><th>What happens</th></tr>
   <tr><td>App opened with no signal</td><td>Shell and last-known incidents load from cache; a banner says the data may be stale</td></tr>
@@ -769,7 +1085,7 @@ rather than a feature that ran out of time.</p>
   there was a client to use them.
 </div>
 
-<h2>8. What the design needs that the API does not yet have</h2>
+<h2>9. What the design needs that the API does not yet have</h2>
 <p>Most of this specification is served by endpoints that already exist and are tested. Three are
 not, and they are listed here so they are planned rather than discovered mid-build.</p>
 <table>
@@ -801,7 +1117,7 @@ not, and they are listed here so they are planned rather than discovered mid-bui
   hiding it.
 </div>
 
-<h2>9. Accessibility and constraints</h2>
+<h2>10. Accessibility and constraints</h2>
 <table>
   <tr><td>Touch targets</td><td>44 px minimum on mobile</td></tr>
   <tr><td>Contrast</td><td>WCAG AA for body text; status colours paired with text, never colour alone</td></tr>

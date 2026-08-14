@@ -9,7 +9,7 @@
  * the same information and the view still works.
  */
 
-import { api } from "../api.js";
+import { api, auth } from "../api.js";
 import { refreshIncidents, state, subscribe } from "../store.js";
 import {
   LABEL, STATUS_COLOUR, TYPE_LABEL, ago, avatar, empty, errorState,
@@ -19,15 +19,32 @@ import {
 const ACCRA = [-0.187, 5.603];
 
 export default function mapView(mount) {
+  /* Signed out, the map is the whole page — D-044.
+   *
+   * No list beneath it, because the list is a table of things the visitor cannot open;
+   * no tab bar, because the shell removes it. What is left is the road, a legend and a
+   * count, which is everything the public map ever promised. */
+  const open = !auth.signedIn;
+
   mount.innerHTML = `
     <div id="map" role="img" aria-label="Map of current incidents in Greater Accra"></div>
+    ${open ? `
+      <div class="mapchip">
+        <span class="t" id="count"></span>
+        <span class="m">Tap a marker to see what is blocking the road</span>
+      </div>
+      <div class="maplegend">
+        ${legend("verified", "verified")}
+        ${legend("corroborated", "corroborated")}
+        ${legend("reported", "unconfirmed")}
+      </div>` : `
     <div class="scroll" style="flex:0 1 auto;max-height:46%;background:var(--canvas)">
       <div class="pad" style="padding-bottom:8px">
         <div class="row-between">
           <h2>Current Incidents</h2>
           <span class="xs num" id="count"></span>
         </div>
-        <div class="inline xs" style="margin-top:8px;gap:14px">
+        <div class="inline centerCap xs" style="margin-top:8px;gap:14px">
           ${legend("verified", "verified")}
           ${legend("corroborated", "corroborated")}
           ${legend("reported", "unconfirmed")}
@@ -35,7 +52,9 @@ export default function mapView(mount) {
         </div>
       </div>
       <div class="pad" style="padding-top:0"><div class="list" id="list">${skeleton(3)}</div></div>
-    </div>`;
+    </div>`}`;
+
+  if (open) mount.style.position = "relative";
 
   let map = null;
   let markers = [];
@@ -82,20 +101,36 @@ export default function mapView(mount) {
     // The map is an enhancement. If the library or its tiles cannot load — on exactly
     // the connection this system's users have — the list takes the whole view and
     // carries the same information.
+    const list = mount.querySelector(".scroll");
+    if (!list) {
+      // Signed out there is no list to fall back to, so say so in the space the map
+      // would have used. An empty grey rectangle is not a degraded map, it is a bug.
+      el.innerHTML = `<div class="pad center" style="margin:auto;max-width:280px">
+        ${empty("The map could not load",
+                "Your connection may be too slow for it. Sign in to see the list instead.")}
+        <a class="btn btn--block" href="#/signin" style="margin-top:12px">Sign in</a>
+      </div>`;
+      el.style.display = "flex";
+      return;
+    }
     el.style.flex = "0 0 auto";
     el.style.minHeight = "0";
     el.style.height = "0";
-    const list = mount.querySelector(".scroll");
     list.style.maxHeight = "none";
     list.style.flex = "1 1 auto";
   }
 
   function render(incidents) {
-    mount.querySelector("#count").textContent =
-      incidents.length ? `${incidents.length} shown` : "";
+    const count = mount.querySelector("#count");
+    if (count) {
+      count.textContent = open
+        ? `${incidents.length} incident${incidents.length === 1 ? "" : "s"} in Greater Accra`
+        : (incidents.length ? `${incidents.length} shown` : "");
+    }
     drawPins(incidents);
 
     const list = mount.querySelector("#list");
+    if (!list) return;
     if (!incidents.length) {
       list.innerHTML = empty("Nothing reported", "The roads are clear, or nobody has said otherwise yet.");
       return;
@@ -123,10 +158,16 @@ export default function mapView(mount) {
     if (!map) return;
     markers.forEach(m => m.remove());
     markers = incidents.map(inc => {
-      const size = 14 + Math.round(inc.confidence * 22);
+      // Signed out, `confidence` is withheld, so size follows status instead of the
+      // score. The three statuses are the score banded at 0.35 and 0.70 — the same
+      // grammar at three steps rather than continuous.
+      const size = open
+        ? ({ reported: 16, corroborated: 24, verified: 32, assigned: 30 }[inc.status] ?? 18)
+        : 14 + Math.round(inc.confidence * 22);
       const el = document.createElement("button");
-      el.setAttribute("aria-label",
-        `${TYPE_LABEL[inc.incident_type]}, ${LABEL.confidence.toLowerCase()} ${pct(inc.confidence)}`);
+      el.setAttribute("aria-label", open
+        ? `${TYPE_LABEL[inc.incident_type]}, ${inc.status.replace("_", " ")}`
+        : `${TYPE_LABEL[inc.incident_type]}, ${LABEL.confidence.toLowerCase()} ${pct(inc.confidence)}`);
       el.style.cssText = `width:${size}px;height:${size}px;border-radius:50%;cursor:pointer;
         background:${STATUS_COLOUR[inc.status] ?? "#888"};border:2px solid rgba(255,255,255,.92);
         box-shadow:0 1px 4px rgba(0,0,0,.3);padding:0`;
@@ -143,13 +184,50 @@ export default function mapView(mount) {
       onMount: async (el) => {
         try {
           const inc = await api(`/incidents/${id}`);
-          el.querySelector(".sheet__body").innerHTML = detailHtml(inc);
-          wireEvidence(el);
+          el.querySelector(".sheet__body").innerHTML = open ? teaserHtml(inc) : detailHtml(inc);
+          if (!open) wireEvidence(el);
         } catch (err) {
           el.querySelector(".sheet__body").innerHTML = errorState(err.message);
         }
       },
     });
+  }
+
+  /* What a signed-out visitor gets — D-044.
+   *
+   * The answer comes first and costs nothing: what is blocking the road, roughly where,
+   * and how long ago. Only then does it say what an account adds, and it says it in the
+   * visitor's words rather than the system's — "photographs and spoken reports", not
+   * "evidence attachments"; "how accurate this is", not "confidence score".
+   *
+   * The list of what is locked is deliberately concrete. "Sign in for more" asks somebody
+   * to pay a price for an unnamed thing; naming the three lets them decide it is not
+   * worth it, which is a fair outcome and a more honest ask. */
+  function teaserHtml(inc) {
+    return `
+      <div class="row-between" style="margin-bottom:4px">
+        <h2 style="font-size:17px">${esc(TYPE_LABEL[inc.incident_type] ?? inc.incident_type)}</h2>
+        <span class="tag tag--${esc(inc.status)}">${esc(inc.status.replace("_"," "))}</span>
+      </div>
+      <p class="m">Last reported ${esc(ago(inc.last_reported_at))}</p>
+
+      <div class="locked">
+        <div class="inline xs" style="gap:6px;color:var(--faint);margin-bottom:8px">
+          ${icon("lock",14)}
+          <span style="text-transform:uppercase;letter-spacing:.06em;font-weight:600">Needs an account</span>
+        </div>
+        <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.9;color:var(--muted)">
+          <li>Who reported it, and how reliable they are</li>
+          <li>Photographs and spoken reports</li>
+          <li>How accurate this is, and why</li>
+        </ul>
+      </div>
+
+      <a class="btn btn--block" href="#/signin" style="margin-top:14px">Sign in to see the detail</a>
+      <a class="btn btn--ghost btn--block" href="#/register" style="margin-top:8px">Create an account</a>
+      <p class="hint center" style="margin:10px 0 20px">
+        An account also lets you report, and warns you about your own routes.
+      </p>`;
   }
 
   function detailHtml(inc) {

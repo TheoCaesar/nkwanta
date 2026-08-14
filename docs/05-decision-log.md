@@ -9,6 +9,56 @@ Format: what was decided, what else was considered, why, and what it costs.
 
 ---
 
+## 14 August 2026 — the signed-out map
+
+### D-044 — A signed-out visitor sees the road, not the people
+
+**Decided:** No sidebar and no tab bar when signed out. The map fills the screen and the
+only control is *Sign in*. Tapping a marker gives the incident **type**, its **status**
+and **how long ago** it was last reported — then a lock listing what an account adds.
+Reporter names, credibility, photographs, recordings and the numeric accuracy score all
+require signing in.
+
+**Considered:** leaving details open and only fixing the navigation, which reverses
+nothing; markers with no meaning at all until you sign in, which is the strongest push to
+register; and disabling the sidebar items rather than removing them.
+
+**Why:** Two separate problems, and they have the same answer.
+
+The navigation was showing four destinations that would refuse the visitor and one that
+would not. A console with every item greyed out advertises a product somebody cannot use;
+removing it entirely makes the map the page, which is what it should have been.
+
+The gating narrows the promise in `02-problem-and-scope.md` — that a commuter checking the
+road ahead should not need an account — and the narrowing is deliberate rather than
+accidental. **What is blocking the road, where, and how recently is kept.** That was the
+promise. What now needs an account is everything about the *people*: who reported it, what
+they photographed or recorded, and the score built from their credibility. Those were
+never part of the commuter's promise. They are the working material of the control room,
+and every one of them identifies a reporter — which is what NFR-4a exists to prevent, and
+what D-029 and D-042 already govern for evidence specifically.
+
+The accuracy score is gated for a reason worth stating separately: **it cannot be
+separated from the people who produced it.** It is a function of who reported the incident
+and how reliable each has been. Publishing it beside a marker publishes a summary of their
+credibility to anyone with the link. The status tag carries the same judgement at a
+coarser grain — *corroborated* means several people independently, *verified* means enough
+that the police have been told — so a commuter gets the conclusion without the working.
+
+Disabling rather than removing the sidebar was rejected on the same grounds as the
+would-be-refused buttons in `dispatch.js`: an action that would be refused should not
+be offered.
+
+**Costs.** A commuter who wants to know *how sure* the system is must now sign in, and
+55% versus 88% is exactly the kind of thing that decides whether somebody leaves early.
+That is the real case against this. If the trade proves wrong, the cheapest reversal is to
+show the score but never the reporters — it is one field on a response that is already
+public — and this entry exists partly to keep that option visible.
+
+Designed before being built: `docs/design/ui-designs.html` §3.
+
+---
+
 ## 14 August 2026 — serving the evidence
 
 ### D-043 — Attachment URLs are signed and short-lived

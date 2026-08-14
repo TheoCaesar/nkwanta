@@ -165,13 +165,28 @@ class IncidentResponse(BaseModel):
     incident_type: IncidentType
     latitude: float
     longitude: float
-    confidence: float
     status: IncidentStatus
-    report_count: int
     first_reported_at: dt.datetime
     last_reported_at: dt.datetime
     assigned_to_id: uuid.UUID | None = None
     resolved_at: dt.datetime | None = None
+
+    # Absent for a signed-out visitor — D-044.
+    #
+    # Both of these describe the *people* behind the incident rather than the road. The
+    # confidence score is a function of who reported it and how reliable each of them has
+    # been, so publishing it beside a marker publishes a summary of their credibility to
+    # anyone holding the link; the count is the size of that group.
+    #
+    # `status` stays, and carries the same judgement at a coarser grain — corroborated
+    # means several people independently, verified means enough that the police have been
+    # told. A commuter gets the conclusion without the working.
+    #
+    # `None` rather than a separate schema: one shape, one field that is sometimes absent,
+    # and a client that must handle the absence either way. Two schemas would be two
+    # places to forget.
+    confidence: float | None = None
+    report_count: int | None = None
 
 
 class IncidentDetailResponse(IncidentResponse):
