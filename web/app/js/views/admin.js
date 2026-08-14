@@ -9,7 +9,7 @@
  */
 
 import { api } from "../api.js";
-import { esc, icon, closeSheet, empty, errorState, rules, sheet, skeleton, toast, validate, avatar } from "../ui.js";
+import { esc, icon, closeSheet, empty, errorState, pct, rules, sheet, skeleton, toast, validate, avatar } from "../ui.js";
 
 const ROLES = ["commuter", "warden", "officer", "admin"];
 
@@ -60,7 +60,7 @@ export default function adminView(mount) {
       <div class="card">
         <h2>Demonstration data</h2>
         <p class="hint" style="margin-bottom:12px">
-          Confidence halves every 45 minutes, so seeded data fades. Refresh it shortly before
+          Accuracy halves every 45 minutes, so seeded data fades. Refresh it shortly before
           a demonstration or the map will look empty.
         </p>
         <div class="inline">
@@ -158,7 +158,7 @@ export default function adminView(mount) {
         </span>
         <span style="text-align:right">
           <span class="tag tag--${u.role === "officer" ? "assigned" : "reported"}">${esc(u.role)}</span>
-          <span class="m num">${u.reputation.toFixed(2)}
+          <span class="m num">${pct(u.reputation)}
             ${u.reports_confirmed || u.reports_contradicted
               ? `· ${u.reports_confirmed}✓ ${u.reports_contradicted}✗` : ""}</span>
         </span>

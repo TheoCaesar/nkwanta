@@ -28,6 +28,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.geo import to_wkt_point
 from app.models import (
+    Attachment,
+    AttachmentKind,
     Corridor,
     CorridorSubscription,
     Incident,
@@ -289,6 +291,93 @@ def _linestring(points: list[tuple[float, float]]) -> str:
     return f"LINESTRING({coords})"
 
 
+# --- placeholder evidence -----------------------------------------------------
+# Generated rather than embedded, so nothing binary sits in the repository. Both are
+# real files of their stated type and both actually open — the point is to exercise
+# upload, storage, consent and playback end to end, not to look convincing.
+#
+# **These are placeholders and the documentation says so.** The photograph is a
+# generated gradient, and the recording is a tone rather than speech. Presenting
+# synthesised data as if it were real would be the wrong kind of demonstration.
+
+
+def _placeholder_png(width: int = 320, height: int = 200, seed: int = 0) -> bytes:
+    """A small PNG, written by hand. No image library, no committed binary."""
+    import struct
+    import zlib
+
+    rows = bytearray()
+    for y in range(height):
+        rows.append(0)                                    # filter byte: none
+        for x in range(width):
+            rows += bytes((
+                (40 + (x * 120 // width) + seed * 17) % 256,
+                (70 + (y * 90 // height) + seed * 29) % 256,
+                (60 + ((x + y) * 60 // (width + height)) + seed * 11) % 256,
+            ))
+
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        return (struct.pack(">I", len(data)) + tag + data
+                + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF))
+
+    header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)   # 8-bit RGB
+    return (b"\x89PNG\r\n\x1a\n"
+            + chunk(b"IHDR", header)
+            + chunk(b"IDAT", zlib.compress(bytes(rows), 9))
+            + chunk(b"IEND", b""))
+
+
+def _placeholder_wav(seconds: float = 2.0, hz: int = 320) -> bytes:
+    """A short WAV tone. Real audio a browser will play, standing in for speech."""
+    import array
+    import io
+    import math
+    import wave
+
+    rate = 8000
+    frames = array.array("h")
+    for i in range(int(rate * seconds)):
+        # Fade both ends so it does not click, which sounds like a bug rather than a tone.
+        t = i / rate
+        envelope = min(1.0, t * 8, (seconds - t) * 8)
+        frames.append(int(9000 * envelope * math.sin(2 * math.pi * hz * t)))
+
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(rate)
+        wav.writeframes(frames.tobytes())
+    return buffer.getvalue()
+
+
+@dataclass(frozen=True)
+class SeedAttachment:
+    """Evidence hung on a seeded report, keyed the same deterministic way."""
+
+    place: str
+    reporter_key: str
+    minutes_ago: int
+    kind: AttachmentKind
+    is_public: bool
+    duration_seconds: float | None = None
+
+
+# Chosen to make the demonstration show the full range: a shared recording anyone can
+# play, a private one only the control room can hear, and photographs on the two
+# verified incidents.
+SEED_ATTACHMENTS: list[SeedAttachment] = [
+    SeedAttachment("Kwame Nkrumah Circle", "kofi", 6, AttachmentKind.VOICE, True, 14.0),
+    SeedAttachment("Kwame Nkrumah Circle", "kofi", 6, AttachmentKind.PHOTO, True),
+    SeedAttachment("Kwame Nkrumah Circle", "akosua", 9, AttachmentKind.PHOTO, True),
+    SeedAttachment("Achimota junction", "esi", 12, AttachmentKind.VOICE, True, 11.0),
+    SeedAttachment("Spintex Road", "kofi", 22, AttachmentKind.PHOTO, True),
+    # Not shared: appears for its owner and the control room, and is invisible to other
+    # commuters. Worth pointing at in a demonstration.
+    SeedAttachment("Kaneshie Market", "adjoa", 18, AttachmentKind.VOICE, False, 9.0),
+]
+
+
 @dataclass(frozen=True)
 class SeedResult:
     users_created: int
@@ -296,6 +385,7 @@ class SeedResult:
     outbox_queued: int
     corridors_created: int = 0
     subscriptions_created: int = 0
+    attachments_created: int = 0
 
 
 async def clear_demo_data(session: AsyncSession) -> None:
@@ -454,6 +544,39 @@ async def seed(session: AsyncSession, now: dt.datetime | None = None) -> SeedRes
         session.add(build_outbox_message(report, lat, lon))
         outbox_queued += 1
 
+    await session.flush()
+
+    # --- placeholder evidence -------------------------------------------------
+    attachments_created = 0
+    for i, item in enumerate(SEED_ATTACHMENTS):
+        key = f"{item.place}:{item.reporter_key}:{item.minutes_ago}"
+        report_id = _id("report", key)
+        if await session.get(Report, report_id) is None:
+            continue                       # its report was filtered out; skip quietly
+
+        attachment_id = _id("attachment", f"{key}:{item.kind.value}")
+        if await session.get(Attachment, attachment_id) is not None:
+            continue
+
+        if item.kind is AttachmentKind.VOICE:
+            data, content_type = _placeholder_wav(item.duration_seconds or 10.0), "audio/wav"
+        else:
+            data, content_type = _placeholder_png(seed=i), "image/png"
+
+        session.add(
+            Attachment(
+                id=attachment_id,
+                report_id=report_id,
+                kind=item.kind,
+                content_type=content_type,
+                byte_size=len(data),
+                duration_seconds=item.duration_seconds,
+                data=data,
+                is_public=item.is_public,
+            )
+        )
+        attachments_created += 1
+
     await session.commit()
     return SeedResult(
         users_created,
@@ -461,4 +584,5 @@ async def seed(session: AsyncSession, now: dt.datetime | None = None) -> SeedRes
         outbox_queued,
         corridors_created,
         subscriptions_created,
+        attachments_created,
     )

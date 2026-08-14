@@ -133,9 +133,12 @@
     border-radius:var(--r-md); transition:color var(--fast) var(--ease);
   }
   .tabbar a[aria-current="page"] { color:var(--green) }
-  .tabbar a.fab {
-    background:var(--green); color:#fff; padding:8px 14px; margin-top:-10px;
-    box-shadow:var(--lift-2);
+  /* Report is an ordinary tab, not a raised pill. It is one destination among five and
+     styling it as a floating action made it read as a different kind of control — and
+     put it out of line with everything else on desktop. */
+  .tabbar a.fab { color:var(--green) }
+  .tabbar a[aria-current="page"], .tabbar a.fab[aria-current="page"] {
+    background:var(--green-100);
   }
   .tabbar .badge {
     position:absolute; transform:translate(12px,-6px); background:var(--red); color:#fff;
@@ -152,7 +155,9 @@
       padding:var(--s4) var(--s3); gap:2px; order:-1;
     }
     .tabbar a { flex-direction:row; gap:var(--s3); font-size:14px; padding:9px var(--s3); min-width:0 }
-    .tabbar a.fab { margin-top:var(--s3); justify-content:center }
+    /* Aligned with every other item. Centring it made one row of the sidebar disagree
+       with the rest for no reason. */
+    .tabbar a.fab { margin-top:0 }
     .tabbar .badge { position:static; transform:none; margin-left:auto }
     .main { flex:1; display:flex; flex-direction:column; min-width:0 }
   }
@@ -173,7 +178,13 @@
   .m { font-size:12px; color:var(--muted); margin-top:2px }
   .xs { font-size:11px; color:var(--faint) }
 
-  .tag { font-size:11px; padding:2px 8px; border-radius:var(--r-sm); font-weight:500; white-space:nowrap; text-transform: uppercase; }
+  /* Uppercase with tracking, so a status reads as a label rather than as prose. Defined
+     once here so every place a status appears agrees — map, list, sheet, queue, admin. */
+  .tag {
+    font-size:10px; padding:3px 8px; border-radius:var(--r-sm); font-weight:600;
+    white-space:nowrap; text-transform:uppercase; letter-spacing:.06em;
+    display:inline-block;
+  }
   .tag--verified{background:var(--red-100);color:var(--red-700)}
   .tag--corroborated{background:var(--amber-100);color:var(--amber-700)}
   .tag--reported{background:var(--grey-100);color:var(--muted)}
@@ -275,15 +286,31 @@
   .banner--offline{background:var(--amber-100);color:var(--amber-700)}
   .banner--queued{background:var(--blue-100);color:var(--blue)}
 
+  /* Alerts sit at the TOP, where the eye already is after pressing something, and where
+     they cannot be hidden by the tab bar or a phone's home indicator.
+
+     Each variant pairs a pale tint with the darkest text from the same colour family —
+     never white on a mid-tone, which is where these usually become unreadable. A leading
+     bar carries the meaning for anyone who cannot distinguish the hues. */
   .toast{
-    position:fixed;left:50%;bottom:calc(var(--nav-h) + var(--s4));transform:translate(-50%,20px);
-    background:var(--ink);color:#fff;padding:11px var(--s4);border-radius:var(--r-md);
-    font-size:14px;z-index:60;box-shadow:var(--lift-3);opacity:0;pointer-events:none;
+    position:fixed;left:50%;top:calc(var(--s3) + env(safe-area-inset-top));
+    transform:translate(-50%,-16px);
+    display:flex;align-items:flex-start;gap:10px;
+    padding:12px 16px;border-radius:var(--r-md);border:1px solid;border-left-width:4px;
+    font-size:14px;line-height:1.45;font-weight:500;
+    z-index:60;box-shadow:var(--lift-3);opacity:0;pointer-events:none;
+    max-width:min(460px,calc(100vw - 32px));width:max-content;
     transition:opacity var(--base) var(--ease),transform var(--base) var(--ease);
-    max-width:min(420px,90vw);
   }
   .toast[data-open]{opacity:1;transform:translate(-50%,0)}
-  .toast--err{background:var(--red-700)}
+
+  .toast--info   {background:var(--card);   border-color:var(--line);       color:var(--ink)}
+  .toast--success{background:var(--green-100);border-color:var(--green);    color:var(--green-dark)}
+  .toast--warning{background:var(--amber-100);border-color:var(--amber);    color:var(--amber-700)}
+  .toast--error  {background:var(--red-100); border-color:var(--red);       color:var(--red-700)}
+  .toast svg{flex:none;margin-top:1px}
+
+  @media (min-width:900px){ .toast{top:var(--s4)} }
 
   /* A floor as well as a share. `flex:1` alone let the map collapse to nothing whenever
      the list beneath it wanted the room — which on a short phone screen is always. */

@@ -141,8 +141,12 @@ class EvidenceResponse(BaseModel):
     """One report's contribution to an incident's confidence.
 
     This is what makes the score explainable rather than merely displayed. An officer
-    can see which reporter, how reliable they have been, and how much that particular
-    report counted.
+    can see which reporter, how reliable they have been, how much that particular report
+    counted — and now what they actually said.
+
+    `attachments` is filtered by the same rule that guards the bytes: a recording appears
+    here only if its reporter shared it, or the caller is its owner or control room.
+    Listing something that cannot then be played would announce that it exists.
     """
 
     report_id: uuid.UUID
@@ -150,6 +154,8 @@ class EvidenceResponse(BaseModel):
     reporter_reputation: float
     occurred_at: dt.datetime
     weight: float
+    note: str | None = None
+    attachments: list["AttachmentResponse"] = []
 
 
 class IncidentResponse(BaseModel):

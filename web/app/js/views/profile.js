@@ -9,7 +9,7 @@ import { api, auth } from "../api.js";
 import { go } from "../router.js";
 import { loadUser, signOut, state } from "../store.js";
 import {
-  ago, avatar, empty, errorState, esc, icon, rules, sheet, closeSheet,
+  LABEL, ago, avatar, empty, errorState, esc, icon, pct, rules, sheet, closeSheet,
   skeleton, toast, validate,
 } from "../ui.js";
 
@@ -34,10 +34,10 @@ export default function profileView(mount) {
       <div class="pad stack">
         <div class="card">
           <div class="row-between">
-            <h2 style="margin:0">Your standing</h2>
-            <strong class="num" style="font-size:20px">${user.reputation.toFixed(2)}</strong>
+            <h2 style="margin:0">Your ${LABEL.reputation.toLowerCase()}</h2>
+            <strong class="num" style="font-size:20px">${pct(user.reputation)}</strong>
           </div>
-          <div class="bar" style="margin:10px 0"><i style="width:${Math.round(user.reputation*100)}%"></i></div>
+          <div class="bar" style="margin:10px 0"><i style="width:${Math.floor(user.reputation*100)}%"></i></div>
           <div class="inline" style="gap:20px;margin-top:12px;text-transform:uppercase;text-align:center">
             <span><strong style="font-size:18px">${user.reports_confirmed}</strong>
               <span class="xs" style="display:block">confirmed</span></span>
@@ -45,9 +45,9 @@ export default function profileView(mount) {
               <span class="xs" style="display:block">not found</span></span>
           </div>
           <p class="hint" style="margin-top:12px">
-            Your standing rises when a warden confirms something you reported, and falls when
+            Your credibility rises when a warden confirms something you reported, and falls when
             one attends and finds nothing. It decides how much weight your reports carry —
-            reaching 0.9 takes around eighteen confirmations, so it is slow to build and
+            reaching 90% takes around eighteen confirmations, so it is slow to build and
             meaningful when built.
           </p>
         </div>

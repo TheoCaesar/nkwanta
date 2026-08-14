@@ -23,9 +23,18 @@ from app.auth import ControlRoom, CurrentUser, OptionalUser, WardenOnly
 from app.confidence import THRESHOLD_STALE, THRESHOLD_VERIFIED
 from app.db import get_session
 from app.lifecycle import IllegalTransition, allowed_actions
-from app.models import Incident, IncidentReport, IncidentStatus, IncidentType, Report, User
+from app.models import (
+    Attachment,
+    Incident,
+    IncidentReport,
+    IncidentStatus,
+    IncidentType,
+    Report,
+    User,
+)
 from app.schemas import (
     AssignRequest,
+    AttachmentResponse,
     EvidenceResponse,
     IncidentDetailResponse,
     IncidentResponse,
@@ -35,6 +44,7 @@ from app.schemas import (
     WardenResponse,
 )
 from app.services import dispatch
+from app.services.attachments import may_play
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
@@ -134,6 +144,21 @@ async def get_incident(
         )
     ).all()
 
+    # One query for every attachment on every contributing report, rather than one per
+    # report. Each is then filtered by `may_play`, so an unshared recording is invisible
+    # rather than listed and then refused.
+    report_ids = [link.report_id for link, _, _ in rows]
+    attachments: dict[uuid.UUID, list[Attachment]] = {}
+    if report_ids:
+        for att in await session.scalars(
+            select(Attachment)
+            .where(Attachment.report_id.in_(report_ids))
+            .order_by(Attachment.created_at)
+        ):
+            attachments.setdefault(att.report_id, []).append(att)
+
+    reports_by_id = {report.id: report for _, report, _ in rows}
+
     base = _to_response(incident)
     return IncidentDetailResponse(
         **base.model_dump(),
@@ -144,6 +169,22 @@ async def get_incident(
                 reporter_reputation=user.reputation,
                 occurred_at=report.occurred_at,
                 weight=link.weight,
+                note=report.note,
+                attachments=[
+                    AttachmentResponse(
+                        id=a.id,
+                        report_id=a.report_id,
+                        kind=a.kind,
+                        content_type=a.content_type,
+                        byte_size=a.byte_size,
+                        duration_seconds=a.duration_seconds,
+                        created_at=a.created_at,
+                        url=f"/attachments/{a.id}",
+                        is_public=a.is_public,
+                    )
+                    for a in attachments.get(link.report_id, [])
+                    if may_play(a, reports_by_id.get(a.report_id), viewer)
+                ],
             )
             for link, report, user in rows
         ],

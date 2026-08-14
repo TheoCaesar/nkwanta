@@ -11,8 +11,8 @@
 import { api } from "../api.js";
 import { refreshIncidents, role, state } from "../store.js";
 import {
-  TYPE_LABEL, ago, avatar, closeSheet, empty, errorState, esc, icon,
-  sheet, skeleton, toast,
+  LABEL, TYPE_LABEL, ago, avatar, closeSheet, empty, errorState, esc, icon,
+  pct, sheet, skeleton, toast,
 } from "../ui.js";
 
 export default function dispatchView(mount) {
@@ -30,8 +30,8 @@ export default function dispatchView(mount) {
         <div class="list" id="queue">${skeleton(3)}</div>
         <p class="hint" style="margin-top:10px">
           ${isWarden
-            ? "Resolving updates the standing of everyone who reported it, so say what you actually found."
-            : "Only incidents above 0.70 appear here. That is the escalation threshold — below it, the answer is more corroboration, not a lower bar."}
+            ? `Resolving updates the ${LABEL.reputation.toLowerCase()} of everyone who reported it, so say what you actually found.`
+            : "Only incidents above 70% accuracy appear here. That is the escalation threshold — below it, the answer is more corroboration, not a lower bar."}
         </p>
       </div>
     </div>`;
@@ -76,7 +76,7 @@ export default function dispatchView(mount) {
     if (!items.length) {
       box.innerHTML = isWarden
         ? empty("Nothing assigned", "An officer will send you where you are needed.")
-        : empty("Nothing needs a warden", "Incidents appear here once confidence reaches 0.70.");
+        : empty("Nothing needs a warden", "Incidents appear here once accuracy reaches 70%.");
       return;
     }
 
@@ -88,7 +88,7 @@ export default function dispatchView(mount) {
         <div class="row-between">
           <span class="grow">
             <span class="t">${esc(TYPE_LABEL[i.incident_type] ?? i.incident_type)}</span>
-            <span class="m">${i.report_count} reports · confidence ${i.confidence.toFixed(2)}
+            <span class="m">${i.report_count} reports · ${LABEL.confidence.toLowerCase()} ${pct(i.confidence)}
               · ${esc(ago(i.last_reported_at))}</span>
           </span>
           <span class="tag tag--${esc(i.status)}">${esc(i.status.replace("_"," "))}</span>
@@ -149,8 +149,8 @@ export default function dispatchView(mount) {
           : "You attended and found nothing blocking the road."}</p>
         <p class="hint" style="margin-top:12px">
           ${confirmed
-            ? "Everyone who reported this will have their standing raised, and anyone warned about it will be told the road is clear."
-            : "Everyone who reported this will have their standing lowered. Use this when the report was mistaken, not when the problem cleared before you arrived — for that, choose “road now clear”."}
+            ? "Everyone who reported this will have their credibility raised, and anyone warned about it will be told the road is clear."
+            : "Everyone who reported this will have their credibility lowered. Use this when the report was mistaken, not when the problem cleared before you arrived — for that, choose “road now clear”."}
         </p>
         <div class="field" style="margin-top:16px">
           <label for="rn">Note <span class="faint">· optional</span></label>
@@ -169,8 +169,8 @@ export default function dispatchView(mount) {
             });
             closeSheet();
             const moved = res.reputations_updated
-              .map(r => `${r.display_name} → ${r.reputation.toFixed(2)}`).join(", ");
-            toast(moved ? `Closed. Standing updated: ${moved}` : "Closed.");
+              .map(r => `${r.display_name} → ${pct(r.reputation)}`).join(", ");
+            toast(moved ? `Closed. Credibility updated: ${moved}` : "Closed.");
             await Promise.all([load(), refreshIncidents()]);
           } catch (err) {
             toast(err.message, { error: true });
@@ -193,8 +193,8 @@ export default function dispatchView(mount) {
           const atts = await api(`/reports/${inc.evidence[0]?.report_id}/attachments`).catch(() => []);
           body.innerHTML = `
             <div class="inline" style="margin-bottom:14px">
-              <span class="bar grow"><i style="width:${Math.round(inc.confidence*100)}%"></i></span>
-              <strong class="num">${inc.confidence.toFixed(2)}</strong>
+              <span class="bar grow"><i style="width:${Math.floor(inc.confidence*100)}%"></i></span>
+              <strong class="num">${pct(inc.confidence)}</strong>
             </div>
             ${atts.length ? `
               <div class="card card--flat" style="margin-bottom:14px">
@@ -210,9 +210,9 @@ export default function dispatchView(mount) {
                 <div class="row-between">
                   <span class="inline">${avatar(e.reporter_name, e.report_id, 28)}
                     <span><span class="t" style="font-size:13px">${esc(e.reporter_name)}</span>
-                    <span class="m">reputation ${e.reporter_reputation.toFixed(2)} · ${esc(ago(e.occurred_at))}</span></span>
+                    <span class="m">${LABEL.reputation.toLowerCase()} ${pct(e.reporter_reputation)} · ${esc(ago(e.occurred_at))}</span></span>
                   </span>
-                  <span class="num" style="font-size:13px">${e.weight.toFixed(3)}</span>
+                  <span class="num" style="font-size:13px">${pct(e.weight / 0.45)}</span>
                 </div>`).join("")}
             </div>`;
         } catch (err) {

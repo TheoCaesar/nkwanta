@@ -98,7 +98,28 @@ report that joins its cluster.
 
 ---
 
-### Reputation score
+### Confidence score — shown on screen as **accuracy**
+
+**Plain English:** A number between 0 and 1 saying how believable an Incident is, given
+everyone who has reported it and how long ago.
+
+It is not a probability that the road is blocked, and it is not a measurement. It is a
+summary of the evidence: how many people said it, how much their past reports have been
+worth, and how stale the newest one is.
+
+**Why it matters here:** It is the number that decides what happens. Below 0.35 an
+Incident is only shown as unconfirmed; above 0.70 it enters the dispatch queue and an
+officer can send a warden. On screen it appears as a whole percentage, always **rounded
+down** — see D-040 — because the cost of overstating it is a warden sent to a road on
+thinner evidence than the screen implied.
+
+**Two names, one thing.** The code, database and API say `confidence`; the interface says
+*accuracy*. "Confidence" invites a reader to hear certainty, when the number really means
+corroboration. The mapping is recorded in D-039 and enforced by a test.
+
+---
+
+### Reputation score — shown on screen as **credibility**
 
 **Plain English:** A number tracking how often a particular user's past reports turned out
 to be true.

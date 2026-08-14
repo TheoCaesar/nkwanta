@@ -374,3 +374,131 @@ def test_the_voice_recorder_stops_itself_at_the_limit() -> None:
     assert "MAX_VOICE" in report
     assert "recorder.stop()" in report
     assert "WARN_AT" in report
+
+
+# =============================================================================
+# THE WORDS AND NUMBERS THE INTERFACE SHOWS
+# =============================================================================
+
+
+def test_the_interface_never_says_confidence_or_reputation() -> None:
+    """Two internal names that mislead a road user.
+
+    "Confidence" invites a reader to hear certainty when the number means corroboration,
+    and "reputation" sounds like a social score rather than a record of reports that
+    turned out to be true. The database and the code keep the original names — renaming
+    columns mid-exam is how migrations go wrong — so the translation lives in one place,
+    `LABEL`, and every view reads it from there.
+    """
+    views = {n: s for n, s in JS.items() if n not in {"ui.js", "sw.js"}}
+    assert len(views) >= 10, "the module list is empty; this test would pass vacuously"
+    for name, source in views.items():
+        # Strip comments: the explanation of the rename is allowed to name the old words.
+        code = re.sub(r"/\*.*?\*/", "", source, flags=re.S)
+        code = re.sub(r"^\s*//.*$", "", code, flags=re.M)
+        # Strip identifiers — `inc.confidence` is the API field, not a visible word.
+        code = re.sub(r"[.\w]*\b(confidence|reputation)s?\b", "", code)
+        for word in ("Confidence", "Reputation", "Standing", "standing"):
+            assert word not in code, f"{name} shows the internal word “{word}”"
+
+
+def test_the_labels_are_defined_in_exactly_one_place() -> None:
+    assert 'confidence: "Accuracy"' in JS["ui.js"].replace("'", '"')
+    assert 'reputation: "Credibility"' in JS["ui.js"].replace("'", '"')
+
+
+def test_percentages_are_rounded_down_not_nearest() -> None:
+    """Rounding up overstates how sure the system is, and above 0.70 that number sends a
+    warden to a road. When it is wrong it should be wrong in the direction of caution."""
+    pct = re.search(r"export const pct = [^;]+;", JS["ui.js"]).group(0)
+    assert "Math.floor" in pct
+    assert "Math.round" not in pct
+    assert "%" in pct, "pct must produce a percentage, not a fraction"
+
+
+def test_no_view_shows_a_raw_probability() -> None:
+    """0.62 means nothing to a commuter. Every score reaching the screen goes through
+    `pct`, and a bar's width is floored for the same reason its number is."""
+    for name, source in JS.items():
+        assert "confidence.toFixed" not in source, f"{name} shows a raw probability"
+        assert "reputation.toFixed" not in source, f"{name} shows a raw probability"
+        assert "Math.round(inc.confidence*100)" not in source.replace(" ", ""), name
+
+
+# =============================================================================
+# ALERTS AND TAGS
+# =============================================================================
+
+
+def test_alerts_appear_at_the_top_of_the_screen() -> None:
+    """The tab bar owns the bottom of the screen. A message that appears under a thumb
+    resting on the navigation is a message nobody reads."""
+    css = (APP_DIR / "css" / "app.css").read_text(encoding="utf-8")
+    toast = re.search(r"\.toast\s*\{([^}]*)\}", css).group(1).replace(" ", "")
+    assert "position:fixed" in toast
+    assert re.search(r"top:", toast), "the alert must be anchored to the top"
+    assert "bottom:" not in toast
+
+
+@pytest.mark.parametrize("kind", ["info", "success", "warning", "error"])
+def test_each_kind_of_alert_is_told_apart_by_colour(kind: str) -> None:
+    css = (APP_DIR / "css" / "app.css").read_text(encoding="utf-8")
+    rule = re.search(rf"\.toast--{kind}\s*\{{([^}}]*)\}}", css)
+    assert rule, f"no styling for a {kind} alert"
+    body = rule.group(1).replace(" ", "")
+    assert "background:" in body and "color:" in body, (
+        f"a {kind} alert must set both a background and a text colour, or it will be "
+        "unreadable against one of the two themes"
+    )
+
+
+def test_an_error_alert_is_announced_and_stays_longer() -> None:
+    ui = JS["ui.js"]
+    assert 'role="alert"' in ui or "role\\=\"alert\"" in ui or "'alert'" in ui or '"alert"' in ui
+    assert "assertive" in ui, "an error must interrupt a screen reader, not queue behind it"
+
+
+def test_status_tags_are_capitalised_once_in_the_stylesheet() -> None:
+    """Rather than in each of the four places a status is rendered — which is how three
+    of them end up lower case."""
+    css = (APP_DIR / "css" / "app.css").read_text(encoding="utf-8")
+    tag = re.search(r"\.tag\s*\{([^}]*)\}", css).group(1).replace(" ", "")
+    assert "text-transform:uppercase" in tag
+    # And nowhere else: a tag that also upper-cases in JavaScript would be doing the same
+    # job twice, and the two would drift.
+    for name, source in JS.items():
+        for line in source.splitlines():
+            if 'class="tag' in line:
+                assert "toUpperCase" not in line, f"{name} upper-cases a tag in JavaScript"
+
+
+def test_the_report_tab_is_an_ordinary_tab() -> None:
+    """It was a raised green pill, which read as a floating action button sitting on top
+    of the navigation rather than as one of the five destinations."""
+    css = (APP_DIR / "css" / "app.css").read_text(encoding="utf-8")
+    fab = re.search(r"\.tabbar\s+a\.fab\s*\{([^}]*)\}", css).group(1).replace(" ", "")
+    assert "justify-content:center" not in fab
+    assert 'a.fab[aria-current="page"]' in css.replace(" ", "") or (
+        'a[aria-current="page"]' in css.replace(" ", "")
+    ), "the report tab needs the same active state as the others"
+
+
+# =============================================================================
+# WHAT A REPORTER ACTUALLY SENT
+# =============================================================================
+
+
+def test_the_incident_detail_can_open_a_single_report() -> None:
+    """An incident is a claim; a report is the evidence for it. Somebody deciding whether
+    to send a warden should be able to see the words, photograph and recording behind
+    each one, not only the score they add up to."""
+    detail = JS["map.js"]
+    assert "data-report=" in detail and "data-detail=" in detail
+    assert 'aria-expanded' in detail
+    assert "<audio" in detail, "a recording must be playable in place"
+    assert "<img" in detail, "a photograph must be visible, not a link to download"
+    assert "e.note" in detail
+
+
+def test_a_recording_the_reporter_kept_private_is_marked_as_such() -> None:
+    assert "not shared" in JS["map.js"].lower()

@@ -9,6 +9,87 @@ what comes next.
 
 ---
 
+## 14 August 2026 — Session 18: the interface's vocabulary, and evidence per report
+
+### What happened
+
+A round of interface corrections from testing the live app, all of them small individually
+and all of them about the same thing: **the screen was showing the system's internal
+vocabulary and internal numbers to people who are not the system's author.**
+
+### What changed
+
+| Area | Change | Recorded as |
+|---|---|---|
+| Wording | "confidence" → **accuracy**, "reputation"/"standing" → **credibility**, everywhere on screen. Code, columns and API unchanged | D-039 |
+| Numbers | Every score is now a whole percentage, **rounded down** — never a raw `0.62`, never rounded to nearest | D-040 |
+| Incident popup | Each reporter row now opens to show the note they typed, their photographs and a player for their recording | D-041 |
+| Alerts | Moved from the bottom of the screen to the top, and given four colour variants — info, success, warning, error — each with a matching text colour rather than one grey box | — |
+| Status tags | Capitalised once, in the stylesheet, instead of in each of the four places a status is rendered | — |
+| Report tab | Was a raised green pill that read as a floating button sitting on the navigation. It is now an ordinary tab with the same active state as the other four | — |
+
+The alerts change is not cosmetic. The tab bar owns the bottom of the screen, so a message
+appearing there arrives under a thumb resting on the navigation. An error toast now also
+carries `role="alert"` and `aria-live="assertive"`, and stays seven seconds rather than
+four, because an error a user missed is an error they will hit again.
+
+**Seeded evidence.** The popup had nothing to show, because the seed created reports but
+never attachments. It now generates six — five photographs and a recording — with no
+third-party library: the PNG is written byte by byte with `zlib` and `struct`, the WAV with
+the standard library's `wave` module. One recording is deliberately left **unshared**, on
+the Kaneshie incident, so the consent rule from D-029 is visible in the demo rather than
+only described in a document. Run `python -m scripts.seed_demo --reset` to pick these up.
+
+**The API had to change to make this possible.** `EvidenceResponse` now carries `note` and
+`attachments`, and `GET /incidents/{id}` batch-loads attachments in one query, filtering
+each through `may_play()`. The filtering happens server-side, so an unshared recording is
+*invisible* rather than listed and then refused — listing it would leak that it exists,
+which is most of what the rule is protecting.
+
+### Tests
+
+**395 passing**, up from 381. Fourteen new, all in `test_pwa.py`:
+
+- no view spells out "confidence", "reputation" or "standing" — comments are stripped
+  first, since the explanation of the rename is allowed to name the old words, and
+  identifiers are stripped too, since `inc.confidence` is an API field and not a visible
+  word
+- `pct` uses `Math.floor` and not `Math.round`
+- no view calls `.toFixed` on a score
+- the toast is anchored to the top and each of the four kinds sets both a background and a
+  text colour
+- tags are capitalised in CSS and nowhere else
+- the incident detail has expandable rows, an `<audio>` element, an `<img>`, and marks an
+  unshared recording
+
+The vocabulary test carries a meta-assertion — `len(views) >= 10` — for the reason
+recorded three times already in this log: **when a test asserts something about a
+collection, assert the collection is non-empty first.** It was also verified against a
+planted violation before being committed, rather than trusted because it went green.
+
+One test was written too bluntly and caught by its own suite: banning `.toUpperCase()`
+across all modules failed because avatars legitimately upper-case initials. Narrowed to
+lines that render a tag. Same family of error as the focus-outline test in session 15.
+
+### Where things stand
+
+Unchanged from session 17, except that the interface now reads as a product rather than as
+a debugging view of the database.
+
+### What is unresolved
+
+- Nothing pushed to git since session 14. This is now four sessions of work sitting in a
+  working tree, and it is the largest single risk to the submission.
+- Clearance still has no integration test and no resolved incident in the seed.
+- The five submission PDFs are still unassembled — the content exists across `docs/`.
+- The old page at `/` has not been retired.
+
+### What comes next
+
+Push. Then the submission documents.
+
+---
+
 ## 13 August 2026 — Session 17: the interface rebuilt as a PWA
 
 ### What happened

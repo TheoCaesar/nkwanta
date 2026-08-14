@@ -9,6 +9,82 @@ Format: what was decided, what else was considered, why, and what it costs.
 
 ---
 
+## 14 August 2026 — the words and numbers the interface shows
+
+### D-041 — Evidence is opened per report, not summarised per incident
+
+**Decided:** The incident popup lists each reporter as a row that opens. Inside are the
+words they typed, the photographs they attached and a player for the recording, if it was
+shared. The row shows a one-line summary — "note · 2 photos · voice" — so a reader knows
+whether opening it is worth the tap. A row with nothing behind it is disabled rather than
+hidden.
+
+**Considered:** pooling all evidence for the incident into one gallery, which is what most
+incident tools do; and leaving evidence out of the commuter view entirely, as it was.
+
+**Why:** The pooled gallery loses the link between a claim and who made it. This system's
+whole argument is that a claim inherits its weight from the person making it — so a
+photograph detached from its reporter is exactly the wrong abstraction. An officer
+deciding whether to send a warden needs to know that the photograph came from the reporter
+with 91% credibility, not merely that a photograph exists.
+
+The disabled row is deliberate. Hiding rows with no evidence would make the list of
+reporters shorter than the report count, which is confusing; showing them greyed says
+"this person reported it and sent nothing else", which is true and worth knowing.
+
+**Costs.** One request returns more rows than before, since attachments are now joined in.
+Mitigated by batch-loading them in a single query rather than one per report, and by the
+existing caps — three photographs and one recording per report.
+
+---
+
+### D-040 — Percentages are rounded down, never to nearest
+
+**Decided:** Every score shown on screen is floored to a whole percent. 0.899 shows as
+89%, not 90%.
+
+**Considered:** rounding to nearest, which is the convention; and one decimal place, which
+avoids the question.
+
+**Why:** These numbers are not decorative. Above 70% an incident enters the dispatch queue
+and a warden may be sent to a road. When a displayed number is wrong it should be wrong in
+the direction of understating what the system knows, because the cost of overstating is a
+warden dispatched on thinner evidence than the screen implied. Rounding down also makes
+the threshold honest: nothing shows 70% until it has genuinely reached 0.70.
+
+**Costs.** A user watching a score climb sees it stall at 89% for slightly longer than
+nearest-rounding would. That is the correct direction to err.
+
+---
+
+### D-039 — "Accuracy" and "credibility" on screen; `confidence` and `reputation` in the code
+
+**Decided:** The interface says **accuracy** where the code says `confidence`, and
+**credibility** where the code says `reputation`. The database columns, API fields and
+module names are unchanged. The translation lives in one exported object, `LABEL`, and a
+test fails if any view spells out either internal word.
+
+**Considered:** renaming everything, columns included, so there is one vocabulary; and
+keeping the internal words on screen, as before.
+
+**Why:** The internal words mislead a road user. "Confidence" invites a reader to hear
+certainty, when the number means *how much independent corroboration exists* — a single
+very trusted reporter and four strangers can produce the same figure by different routes.
+"Reputation" sounds like a popularity score attached to a person, when it is a record of
+whether that person's past reports turned out to be true. Neither is what the reader
+assumes, and both are shown to people making decisions about roads.
+
+Renaming the columns was rejected on timing, not principle. A rename touching the model,
+the migrations, seven services and every test is the kind of change that goes wrong at
+hour forty of forty-eight, and it buys nothing the mapping does not.
+
+**Costs.** Two vocabularies, and a reader moving between the code and the screen has to
+carry the mapping. Mitigated by the glossary, which now records both names against one
+definition, and by the test — the mapping cannot silently rot, because a view that spells
+out "Reputation" fails the build.
+
+---
+
 ## 13 August 2026 — front end and interface design
 
 ### D-038 — Avatars are initials; nobody uploads a profile photograph

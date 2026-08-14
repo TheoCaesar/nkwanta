@@ -61,6 +61,29 @@ export const STATUS_COLOUR = {
 
 export const kb = (bytes) => `${Math.round(bytes / 1024)} KB`;
 
+/** A 0–1 score as a whole percentage, ROUNDED DOWN.
+ *
+ *  Down rather than to nearest, deliberately. These numbers describe how much the system
+ *  believes something, and rounding 0.899 up to 90% claims marginally more confidence
+ *  than the arithmetic supports. Understating is the safe direction for a figure that
+ *  decides whether police are called.
+ */
+export const pct = (value) => `${Math.floor((Number(value) || 0) * 100)}%`;
+
+/* The interface says "accuracy" and "credibility" where the code and the API say
+ * "confidence" and "reputation".
+ *
+ * The internal names are the correct technical ones and the documentation uses them.
+ * But "confidence" invites a reader to hear certainty rather than corroboration, and
+ * "reputation" sounds like a social score rather than a track record of reports that
+ * turned out to be true. These two constants exist so the wording is decided in one
+ * place rather than drifting across eight views.
+ */
+export const LABEL = {
+  confidence: "Accuracy",
+  reputation: "Credibility",
+};
+
 export function initials(name) {
   const parts = String(name || "?").trim().split(/\s+/).slice(0, 2);
   return parts.map(p => p[0] ?? "").join("").toUpperCase() || "?";
@@ -131,19 +154,38 @@ export const errorState = (message, retryAction) => `
 let toastEl = null;
 let toastTimer = null;
 
-export function toast(message, { error = false, ms = 4000 } = {}) {
+const TOAST_ICON = { info: "activity", success: "check", warning: "urgent", error: "x" };
+
+/** Show a message at the top of the screen.
+ *
+ *  `toast("Saved")`                        → info
+ *  `toast("Reported", { type: "success" })`
+ *  `toast(err.message, { error: true })`    → error, kept for existing callers
+ *
+ *  An error is announced assertively so a screen reader interrupts rather than waiting
+ *  for a pause; everything else is polite. A failure the user is not told about promptly
+ *  is a failure they act on.
+ */
+export function toast(message, { type, error = false, ms } = {}) {
+  const kind = type || (error ? "error" : "info");
+
   if (!toastEl) {
     toastEl = document.createElement("div");
-    toastEl.className = "toast";
-    toastEl.setAttribute("role", "status");
-    toastEl.setAttribute("aria-live", "polite");
     document.body.appendChild(toastEl);
   }
-  toastEl.textContent = message;
-  toastEl.classList.toggle("toast--err", error);
+
+  toastEl.className = `toast toast--${kind}`;
+  toastEl.setAttribute("role", kind === "error" ? "alert" : "status");
+  toastEl.setAttribute("aria-live", kind === "error" ? "assertive" : "polite");
+  toastEl.innerHTML = `${icon(TOAST_ICON[kind] ?? "activity", 17)}<span>${esc(message)}</span>`;
   toastEl.setAttribute("data-open", "");
+
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toastEl.removeAttribute("data-open"), ms);
+  // Errors linger — they usually need reading twice, and often acting on.
+  toastTimer = setTimeout(
+    () => toastEl.removeAttribute("data-open"),
+    ms ?? (kind === "error" ? 7000 : 4000),
+  );
 }
 
 /* --------------------------------------------------------------------- sheets */
