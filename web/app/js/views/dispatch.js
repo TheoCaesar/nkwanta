@@ -23,7 +23,7 @@ export default function dispatchView(mount) {
       ${isWarden ? "" : `
         <div class="card">
           <h2>Today</h2>
-          <div class="inline" style="gap:24px" id="stats">${skeleton(1)}</div>
+          <div class="inline centerCap" style="gap:24px" id="stats">${skeleton(1)}</div>
         </div>`}
       <div class="card">
         <h2>${isWarden ? "Assigned to you" : "Dispatch queue"}</h2>

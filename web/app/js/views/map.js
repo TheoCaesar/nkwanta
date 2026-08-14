@@ -24,7 +24,7 @@ export default function mapView(mount) {
     <div class="scroll" style="flex:0 1 auto;max-height:46%;background:var(--canvas)">
       <div class="pad" style="padding-bottom:8px">
         <div class="row-between">
-          <h2>Current incidents</h2>
+          <h2>Current Incidents</h2>
           <span class="xs num" id="count"></span>
         </div>
         <div class="inline xs" style="margin-top:8px;gap:14px">

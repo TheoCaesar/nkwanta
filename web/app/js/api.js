@@ -199,19 +199,36 @@ async function sendEntry(entry) {
 
   // Attachments follow the report, because they need its id. A failure here leaves the
   // report standing — evidence is an addition to a report, never a precondition for one.
+  //
+  // But it is reported rather than swallowed. These calls used to end in `.catch(() => {})`,
+  // which meant a rejected photograph or recording vanished without a word: the user saw
+  // "Reported. Thank you.", and their evidence was simply not there. Silence about a
+  // failure the user could act on — a file too large, a format the server will not take —
+  // is worse than the failure.
+  const rejected = [];
+
   if (entry.photo) {
     const fd = new FormData();
-    fd.append("file", entry.photo, "photo.jpg");
-    await api(`/reports/${reportId}/photo`, { method: "POST", body: fd }).catch(() => {});
+    fd.append("file", entry.photo, entry.photo.name || "photo.jpg");
+    try {
+      await api(`/reports/${reportId}/photo`, { method: "POST", body: fd });
+    } catch (err) {
+      rejected.push(`photograph (${err.message})`);
+    }
   }
+
   if (entry.voice) {
     const fd = new FormData();
     fd.append("file", entry.voice, "voice.webm");
     fd.append("share_publicly", String(entry.shareVoice));
-    await api(`/reports/${reportId}/voice`, { method: "POST", body: fd }).catch(() => {});
+    try {
+      await api(`/reports/${reportId}/voice`, { method: "POST", body: fd });
+    } catch (err) {
+      rejected.push(`recording (${err.message})`);
+    }
   }
 
-  return result;
+  return { ...result, rejected };
 }
 
 /** Drain the queue oldest first. Anything that fails stays queued for next time. */

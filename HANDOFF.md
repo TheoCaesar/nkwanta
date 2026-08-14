@@ -9,6 +9,149 @@ what comes next.
 
 ---
 
+## 14 August 2026 — Session 19: attachments were unviewable, and why
+
+### What happened
+
+Testing the live app found that an uploaded photograph showed as a blank box, and opening
+its URL directly returned `{"detail":"No such attachment."}`. Three separate faults, one
+of them a design error that had been sitting there since voice notes were built.
+
+### 1. A browser cannot send a token on an image
+
+**This is the important one.** Every request in this system proves who is asking with an
+`Authorization: Bearer …` header, added by `fetch`. But `<img src>` and `<audio src>`
+cannot send a header — the browser issues those requests on its own and there is no hook
+to add one.
+
+So any attachment that was not public was, in practice, **unviewable by everybody,
+including the person who had just uploaded it.** They could see it listed and could not
+open it. The interface was asking the browser to do something the browser cannot do, and
+the failure surfaced as a 404, which looks like missing data rather than a missing header.
+
+Fixed with **signed, short-lived URLs** — D-043, `app/media_tokens.py`. When the API
+returns an attachment to a caller `may_play` has already cleared, it appends a token
+naming that one attachment for ten minutes. This is the mechanism behind an S3 presigned
+URL and for the same reason: check the entitlement once where the caller is known, then
+carry it to a place where they are not.
+
+The token has an audience claim, so it cannot be used as a login token and a login token
+cannot be used as it. Both are signed with the same secret; without the claim they would
+be interchangeable, and a media URL — which leaks through history and referrers — would
+have become a session.
+
+### 2. Photographs inherited a privacy default meant for voices
+
+`upload_photo` never passed `is_public`, so it took the model default of `False` — the
+default written for recordings. D-029's reasoning was specific and I did not carry it
+through: **a recording carries the reporter's voice, so sharing it exposes the accuser.**
+A photograph of a flooded road describes the road.
+
+The result was the worst of both: the most useful thing you can show a commuter was
+invisible to all of them, while the actual privacy interest was protected by a default
+nobody had considered separately. Photographs now default to shared and remain
+withdrawable — **D-042**.
+
+This is the same class of error as D-036: a decision inherited a constraint from the case
+it was copied from, and nobody checked whether the constraint still applied.
+
+### 3. Upload failures were swallowed
+
+`sendEntry` ended both attachment calls with `.catch(() => {})`. A rejected photograph or
+recording vanished without a word — the user saw "Reported. Thank you." and their evidence
+was simply not there. That is almost certainly why the voice note never appeared: the
+request failed and nothing said so.
+
+Now collected and reported: *"Reported, but your recording could not be attached
+(<reason>)."* The report still stands, because evidence is an addition to a report and
+never a precondition for one — but silence about a failure the user could act on is worse
+than the failure.
+
+### 4. Nobody could check what they had attached
+
+Added a full-size preview of the chosen photograph and an `<audio>` player for the
+recording, both from local object URLs — no upload, no round trip, works with no
+connection. A recording made in traffic is as likely to be wind noise as speech, and the
+person who made it is the only one who can tell.
+
+Also fixed a bug found while doing it: the file input's `change` listener was bound to the
+element, and removing a photograph replaced that element, so choosing a second photograph
+silently did nothing. Delegated to the container.
+
+### Also
+
+`Content-Disposition` is now `inline` for images and stays `attachment` for everything
+else — which is why opening the URL directly downloaded a file instead of showing a
+picture. `inline` is safe on an image and only on an image: the type was allow-listed on
+the way in, is echoed back rather than guessed, and `nosniff` stops the browser overruling
+it. Audio containers can hold almost anything, so audio keeps `attachment`.
+
+### Tests
+
+**410 passing**, up from 395. Fifteen new in `test_attachments.py` covering the token: it
+opens the attachment it was minted for and no other, is refused when signed with a
+different secret or expired, treats junk as "no" rather than a 500, cannot be exchanged
+either way with a login token, and does not name the viewer.
+
+### Two more, found while chasing the recording
+
+**The service worker version had never been bumped.** `VERSION` sat at `"v1"` through the
+entire build. `cacheFirst` hands back the copy it already has and revalidates behind it,
+so every deploy landed one page-load late — the fix is live, the server is serving it, and
+the user is still running the old JavaScript. Indistinguishable, from the outside, from
+the fix not working. This is almost certainly why the new "could not be attached" message
+did not appear: the page was still running the version that swallowed the error.
+
+**A cached incident detail leaked one viewer's evidence to the next.** The rule was
+`startsWith("/incidents")`, which matches `/incidents/{id}` as well as `/incidents`. The
+cache is keyed by URL and knows nothing about who asked — so a reporter viewing their own
+incident cached a response containing their private recording *and a signed URL that still
+worked*, ready to be served to whoever used the phone next. Narrowed to the list only,
+which is identical for everybody and is the thing worth having offline anyway.
+
+Neither was reported by a user. Both were found by reading the caching layer while looking
+for something else, which is the argument for reading code around a bug rather than only
+at it.
+
+**And a third, from the same cause.** An edit to `admin.js` did not appear in the DOM at
+all — the class was in the file and in the stylesheet, and the element rendered without
+it. Same worker, same `cacheFirst`. It had by then cost time three separate times while
+being read as three different bugs, so it is now fixed at the source: **the worker does
+not register on `localhost`, and actively unregisters any it finds and empties the
+caches.** Skipping registration alone would not have helped, because a worker already
+registered keeps controlling the page.
+
+Offline report queuing is untouched — that is IndexedDB in `api.js` and never depended on
+the worker. What is given up locally is offline *shell* caching, which is tested against
+the deployed site, where it is the only place it matters.
+
+The general lesson, and it is the second time this log has recorded a version of it:
+**when the same symptom is explained three different ways, the explanation is wrong.**
+Photos not loading, an error toast not appearing, and a class not rendering were one bug.
+
+### A diagnostic rather than another guess
+
+`scripts/check_evidence.py` lists the most recent reports and exactly what is attached to
+each — kind, size, shared or private. A missing attachment has two causes that look
+identical from the interface: the upload never succeeded, or it succeeded and the viewer
+is not allowed to see it. The first is a bug and the second is the privacy rule working
+correctly. The script says which.
+
+### What is unresolved
+
+- Still nothing pushed to git since session 14. Five sessions now.
+- The signed URL cannot be cached by the service worker, since the token changes each
+  time. Correct for private evidence, wasteful for a public photograph fetched twice.
+  Worth a debt entry if it matters; it does not yet.
+- Clearance still has no integration test.
+- The five submission PDFs are still unassembled.
+
+### What comes next
+
+Push, then the submission documents.
+
+---
+
 ## 14 August 2026 — Session 18: the interface's vocabulary, and evidence per report
 
 ### What happened

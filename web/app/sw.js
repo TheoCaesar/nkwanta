@@ -14,7 +14,18 @@
  * to succeed twice, or an assignment silently replaying.
  */
 
-const VERSION = "v1";
+/* Bump this on every deploy that changes a shell file.
+ *
+ * It is the only thing that evicts the old cache, and forgetting it is the classic
+ * service-worker failure: the fix is deployed, the server is serving it, and the user is
+ * still running last week's JavaScript because `cacheFirst` handed them the copy it
+ * already had. `cacheFirst` does revalidate behind the response, so the new file arrives
+ * — but only on the load *after* the one where it was needed, which is indistinguishable
+ * from the fix not working.
+ *
+ * It sat at v1 through the whole build, which is a deployment bug, not a caching policy.
+ */
+const VERSION = "v3-2026-08-14";
 const SHELL = `nkwanta-shell-${VERSION}`;
 const DATA = `nkwanta-data-${VERSION}`;
 
@@ -72,7 +83,17 @@ self.addEventListener("fetch", (event) => {
   // Never cache anything that identifies a person or could go stale dangerously.
   if (url.pathname.startsWith("/attachments/") || url.pathname.startsWith("/auth/")) return;
 
-  if (url.pathname.startsWith("/incidents")) {
+  // The incident LIST only. Never a single incident.
+  //
+  // A detail response contains the evidence its viewer was entitled to see — a private
+  // recording, and a live signed URL for it — and the cache is keyed by URL alone, with
+  // no notion of who asked. Caching one would mean the reporter views their own incident,
+  // signs out, and the next person on that phone is served their recording from the cache
+  // along with a token that still works.
+  //
+  // The list is identical for everybody, so it is safe to keep and is the thing worth
+  // having offline anyway: which roads are blocked.
+  if (url.pathname === "/incidents" || url.pathname.startsWith("/incidents?")) {
     event.respondWith(networkFirst(request));
     return;
   }

@@ -120,6 +120,44 @@ def test_attachments_and_auth_are_never_cached() -> None:
     assert "/auth/" in SW
 
 
+def test_one_persons_evidence_is_never_cached_for_the_next() -> None:
+    """The data cache is keyed by URL and knows nothing about who asked.
+
+    An incident *detail* carries the evidence its viewer was entitled to see — a private
+    recording, and a signed URL that still works. Caching one would mean the reporter
+    views their own incident, signs out, and the next person on that phone is served it.
+    The *list* is identical for everybody, so it is safe and is the thing worth having
+    offline anyway.
+    """
+    handler = SW[SW.index("addEventListener(\"fetch\"") : SW.index("async function networkFirst")]
+    assert 'startsWith("/incidents")' not in handler, (
+        "this matches /incidents/{id} as well as /incidents, and caches private evidence"
+    )
+    assert '=== "/incidents"' in handler.replace("'", '"')
+
+
+def test_the_worker_stays_out_of_the_way_on_a_development_machine() -> None:
+    """`cacheFirst` is right for a commuter on a bad connection and wrong for anyone
+    editing a file: the edit does not appear until the load after the one where it was
+    made, so the server is serving new code while the page runs old code.
+
+    Skipping registration is not enough on its own — a worker already registered keeps
+    controlling the page — so it must also unregister and empty the caches.
+    """
+    app_js = JS["app.js"]
+    assert "localhost" in app_js and "127.0.0.1" in app_js
+    assert "unregister()" in app_js, "an existing worker would keep serving stale code"
+    assert "caches.delete" in app_js, "its caches would outlive it"
+
+
+def test_the_cache_version_is_bumped_when_the_shell_changes() -> None:
+    """The classic service-worker failure: the fix is deployed, the server is serving it,
+    and the user is still running the old JavaScript because `cacheFirst` handed them the
+    copy it already had. The version constant is the only thing that evicts it."""
+    version = re.search(r'const VERSION = "([^"]+)"', SW).group(1)
+    assert version != "v1", "the version has never been bumped; deploys will not take effect"
+
+
 def test_a_stale_response_is_labelled_as_stale() -> None:
     """The interface says "showing what was last loaded" rather than pretending the data
     is current. That requires the worker to mark it."""

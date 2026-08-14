@@ -493,3 +493,52 @@ to keep it simple.
 
 **Why it matters here:** Covered in Session 4 of the course, and directly relevant to the
 Maintenance and Future Evolution section, worth 3 marks.
+
+---
+
+### Signed URL (also *presigned URL*)
+
+**Plain English:** A web address with proof of permission built into it, so whoever opens
+it can be served the file without having to log in first.
+
+The proof is a short piece of text at the end of the address — `?t=…` — that the server
+generated and signed. It cannot be edited or invented, because any change makes the
+signature stop matching.
+
+**Why it matters here:** Photographs and recordings are private by default, so the server
+has to know who is asking. Every other request in Nkwanta answers that with a token in an
+HTTP header. But `<img>` and `<audio>` tags cannot send a header — the browser fetches
+those on its own — so an attachment was unviewable by everyone, its own uploader included.
+The signed URL solves it: the entitlement is checked once, when the interface asks for the
+incident, and then travels in the address to a place where nobody can be identified.
+
+Nkwanta's expire after ten minutes and cover exactly one file. See D-043.
+
+---
+
+### Capability
+
+**Plain English:** Permission carried by holding something, rather than by being someone.
+
+A door key is a capability: it does not know who you are, and anyone holding it can open
+that one door. A passport is the opposite — it identifies you, and what you may do is
+looked up afterwards.
+
+**Why it matters here:** A signed attachment URL is a key, not a passport. It deliberately
+does not record who requested it, so an image address is not a log of who looked at it.
+The cost is that anyone who obtains the address can open that one file until it expires,
+which is why it expires quickly.
+
+---
+
+### Content sniffing (and `X-Content-Type-Options: nosniff`)
+
+**Plain English:** When a browser ignores what the server said a file is and guesses from
+the contents instead.
+
+**Why it matters here:** It is an attack route on anything that serves files people
+uploaded. Somebody uploads a file declared as audio that actually contains web page
+markup; a browser sniffs it, decides it is a page, and runs it as though it came from us.
+The `nosniff` header tells the browser to believe the declared type and not guess. It is
+sent on every attachment, alongside an allow-list that rejects unexpected types on the way
+in.

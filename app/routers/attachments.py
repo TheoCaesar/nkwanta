@@ -24,7 +24,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import media_tokens
 from app.auth import CurrentUser, OptionalUser
+from app.config import Settings, get_settings
 from app.db import get_session
 from app.models import Attachment, AttachmentKind, Report, UserRole
 from app.schemas import AttachmentResponse, VisibilityRequest
@@ -32,8 +34,20 @@ from app.services import attachments as svc
 
 router = APIRouter(tags=["attachments"])
 
+SettingsDep = Annotated[Settings, Depends(get_settings)]
 
-def _to_response(a: Attachment) -> AttachmentResponse:
+
+def attachment_url(a: Attachment, secret: str) -> str:
+    """The URL an image or audio tag can actually load.
+
+    Signed, because those two elements cannot send an `Authorization` header — see
+    `app/media_tokens.py`. Minting happens here, at the point where the caller has
+    already been cleared by `may_play`, and nowhere else.
+    """
+    return f"/attachments/{a.id}?t={media_tokens.mint(a.id, secret)}"
+
+
+def _to_response(a: Attachment, secret: str) -> AttachmentResponse:
     return AttachmentResponse(
         id=a.id,
         report_id=a.report_id,
@@ -42,7 +56,7 @@ def _to_response(a: Attachment) -> AttachmentResponse:
         byte_size=a.byte_size,
         duration_seconds=a.duration_seconds,
         created_at=a.created_at,
-        url=f"/attachments/{a.id}",
+        url=attachment_url(a, secret),
         is_public=a.is_public,
     )
 
@@ -57,6 +71,7 @@ async def upload_voice(
     report_id: uuid.UUID,
     user: CurrentUser,
     session: Annotated[AsyncSession, Depends(get_session)],
+    settings: SettingsDep,
     file: Annotated[UploadFile, File(description="Audio clip, 512 KB maximum")],
     duration_seconds: Annotated[float | None, Form()] = None,
     share_publicly: Annotated[bool, Form(
@@ -88,7 +103,7 @@ async def upload_voice(
     except svc.AttachmentRejected as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
 
-    return _to_response(result.attachment)
+    return _to_response(result.attachment, settings.jwt_secret)
 
 
 @router.post(
@@ -101,17 +116,39 @@ async def upload_photo(
     report_id: uuid.UUID,
     user: CurrentUser,
     session: Annotated[AsyncSession, Depends(get_session)],
+    settings: SettingsDep,
     file: Annotated[UploadFile, File(description="Image, 250 KB maximum")],
+    share_publicly: Annotated[bool, Form(
+        description="Let other commuters see this. On unless you say otherwise."
+    )] = True,
 ) -> AttachmentResponse:
+    """A photograph defaults to shared; a recording defaults to private. See D-042.
+
+    They are not the same kind of evidence. A recording carries the reporter's voice, so
+    sharing it exposes the person making the accusation — which is what NFR-4a exists to
+    prevent, and why consent there has to be asked for. A photograph of a flooded road
+    describes the road. It is the single most useful thing another commuter can be shown,
+    and defaulting it to private meant nobody ever saw one.
+
+    The reporter can still withdraw it — the same PATCH endpoint governs both — because a
+    photograph can catch a face or a number plate that the person taking it did not
+    notice.
+    """
     data = await file.read()
     try:
         result = await svc.attach(
-            session, report_id, user, AttachmentKind.PHOTO, file.content_type or "", data
+            session,
+            report_id,
+            user,
+            AttachmentKind.PHOTO,
+            file.content_type or "",
+            data,
+            is_public=share_publicly,
         )
     except svc.AttachmentRejected as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
 
-    return _to_response(result.attachment)
+    return _to_response(result.attachment, settings.jwt_secret)
 
 
 @router.get(
@@ -122,13 +159,22 @@ async def upload_photo(
 async def fetch_attachment(
     attachment_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
+    settings: SettingsDep,
     user: OptionalUser = None,
+    t: str | None = None,
 ) -> Response:
     """Playable if the reporter shared it, if it is yours, or if you are control room.
 
     A recording identifies its speaker, so the reporter decides whether other commuters
     hear it — and can change their mind. Officers and wardens can always play it,
     shared or not, because someone being sent to a junction should hear why.
+
+    **Two ways to prove entitlement, because a browser only has one of them.** Normally
+    the caller sends a bearer token and `may_play` decides. But `<img src>` and
+    `<audio src>` cannot send a header — the browser makes those requests on its own —
+    so the API also accepts `?t=`, a short-lived signed token it minted earlier for a
+    caller `may_play` had already cleared. Without this, a private attachment was
+    unviewable by everyone, its own uploader included.
     """
     attachment = await session.get(Attachment, attachment_id)
     if attachment is None:
@@ -136,10 +182,25 @@ async def fetch_attachment(
 
     report = await session.get(Report, attachment.report_id)
 
-    if not svc.may_play(attachment, report, user):
+    entitled = svc.may_play(attachment, report, user) or media_tokens.permits(
+        t, attachment_id, settings.jwt_secret
+    )
+    if not entitled:
         # 404 rather than 403. A 403 would confirm the attachment exists, which is
         # itself information about someone else's report.
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No such attachment.")
+
+    # Images render in place; anything else downloads.
+    #
+    # `inline` on an image is safe here and only here: the type was checked against an
+    # allow-list at upload, it is echoed back verbatim rather than guessed, and `nosniff`
+    # stops the browser overruling it. `inline` on an arbitrary upload is how a file
+    # declared as audio gets executed as HTML on your own origin — so audio, whose
+    # allow-list is wider and whose containers can hold almost anything, keeps
+    # `attachment`. The `<audio>` element plays it either way; the header only governs
+    # what happens when somebody opens the URL directly.
+    inline = attachment.content_type in svc.ALLOWED_IMAGE
+    disposition = "inline" if inline else "attachment"
 
     return Response(
         content=attachment.data,
@@ -149,8 +210,7 @@ async def fetch_attachment(
             # uploaded as audio but containing markup can be sniffed as HTML and
             # executed on our origin.
             "X-Content-Type-Options": "nosniff",
-            # Never render inline, whatever it turns out to be.
-            "Content-Disposition": f'attachment; filename="{attachment_id}"',
+            "Content-Disposition": f'{disposition}; filename="{attachment_id}"',
             # `private` on anything not shared, so a proxy cannot cache one person's
             # recording and serve it to the next caller.
             "Cache-Control": (
@@ -170,6 +230,7 @@ async def set_visibility(
     body: VisibilityRequest,
     user: CurrentUser,
     session: Annotated[AsyncSession, Depends(get_session)],
+    settings: SettingsDep,
 ) -> AttachmentResponse:
     """Only the person who recorded it may change this — not even an officer.
 
@@ -180,7 +241,7 @@ async def set_visibility(
         attachment = await svc.set_visibility(session, attachment_id, user, body.is_public)
     except svc.AttachmentRejected as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
-    return _to_response(attachment)
+    return _to_response(attachment, settings.jwt_secret)
 
 
 @router.get(
@@ -191,6 +252,7 @@ async def set_visibility(
 async def list_attachments(
     report_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
+    settings: SettingsDep,
     user: OptionalUser = None,
 ) -> list[AttachmentResponse]:
     """Lists only what the caller could actually play.
@@ -211,4 +273,4 @@ async def list_attachments(
         .order_by(Attachment.created_at)
     )
     visible = [a for a in rows if svc.may_play(a, report, user)]
-    return [_to_response(a) for a in visible]
+    return [_to_response(a, settings.jwt_secret) for a in visible]

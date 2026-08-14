@@ -136,10 +136,50 @@ async function main() {
   refreshAll();
   setInterval(() => { if (state.online) refreshAll(); }, 30000);
 
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("/static/app/sw.js", { scope: "/static/app/" })
-      .catch(() => {/* the app works without it, just not offline */});
+  installServiceWorker();
+}
+
+/* The service worker is a production feature, and on a development machine it is an
+ * obstacle.
+ *
+ * `cacheFirst` hands back the copy it already has, so an edit to a module does not appear
+ * until the load *after* the one where it was made. That is correct behaviour for a
+ * commuter on a bad connection and useless behaviour for anyone editing the file: the
+ * server is serving the new code, the page is running the old code, and the two look
+ * identical from the outside. It cost an hour before it was recognised.
+ *
+ * So it does not register on localhost — and, because a worker already registered keeps
+ * controlling the page whatever we do next, it actively unregisters any it finds and
+ * empties the caches. Skipping registration alone would have left every machine that has
+ * already run this app still stale.
+ *
+ * Offline report queuing is unaffected: that lives in IndexedDB, in api.js, and has never
+ * depended on the worker. What is lost locally is offline *shell* caching, which is
+ * tested against the deployed site where it actually matters.
+ */
+const DEVELOPMENT_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", ""]);
+
+async function installServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+
+  if (DEVELOPMENT_HOSTS.has(location.hostname)) {
+    const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
+    await Promise.all(registrations.map(r => r.unregister()));
+    if (window.caches) {
+      const keys = await caches.keys().catch(() => []);
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+    if (registrations.length) {
+      // The page currently rendered was served by the worker that has just been removed,
+      // so it is still the stale one. Say so rather than leave the developer looking at
+      // code they have already changed.
+      console.info("Nkwanta: service worker removed for local development. Reload once.");
+    }
+    return;
   }
+
+  navigator.serviceWorker.register("/static/app/sw.js", { scope: "/static/app/" })
+    .catch(() => {/* the app works without it, just not offline */});
 }
 
 main();

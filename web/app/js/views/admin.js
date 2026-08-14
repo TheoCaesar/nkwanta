@@ -21,7 +21,7 @@ export default function adminView(mount) {
     <div class="scroll pad stack">
       <div class="card">
         <h2>System</h2>
-        <div class="inline" style="gap:22px" id="stats">${skeleton(1)}</div>
+        <div class="inline centerCap" style="gap:22px;" id="stats">${skeleton(1)}</div>
       </div>
 
       <div class="card">

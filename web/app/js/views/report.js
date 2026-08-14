@@ -22,6 +22,12 @@ const TYPES = [
   ["signal_outage", "Lights out"], ["roadworks", "Roadworks"], ["surface_defect", "Bad surface"],
 ];
 
+const photoPicker = () => `
+  <label class="btn btn--ghost btn--sm" style="cursor:pointer">
+    ${icon("camera",16)} Add a photo
+    <input type="file" accept="image/jpeg,image/png,image/webp" id="photo" hidden>
+  </label>`;
+
 export default function reportView(mount) {
   let chosenType = null;
   let position = null;
@@ -30,6 +36,7 @@ export default function reportView(mount) {
   let recorder = null;
   let stream = null;
   let sizeTimer = null;
+  let voiceUrl = null;
   let warned = false;
 
   mount.innerHTML = `
@@ -68,12 +75,7 @@ export default function reportView(mount) {
 
         <div class="field" style="margin-top:8px">
           <label>Photograph <span class="faint">· optional</span></label>
-          <div class="inline" id="photoBox">
-            <label class="btn btn--ghost btn--sm" style="cursor:pointer">
-              ${icon("camera",16)} Add a photo
-              <input type="file" accept="image/jpeg,image/png,image/webp" id="photo" hidden>
-            </label>
-          </div>
+          <div id="photoBox">${photoPicker()}</div>
           <div class="hint">Up to ${Math.round(MAX_PHOTO/1000)} KB. Large photos are refused rather than silently shrunk.</div>
         </div>
 
@@ -86,6 +88,7 @@ export default function reportView(mount) {
             </div>
             <div class="bar" style="margin-top:8px"><i id="meterBar" style="width:0"></i></div>
             <div class="hint" id="recHint">Recording stops by itself at the limit. You will be warned at 80%.</div>
+            <div id="voicePreview"></div>
           </div>
 
           <label class="check" style="margin-top:12px">
@@ -152,33 +155,53 @@ export default function reportView(mount) {
     mount.querySelector("#noteCount").textContent = form.note.value.length;
   });
 
-  /* ------------------------------------------------------------------ photo */
-  mount.querySelector("#photo").addEventListener("change", (e) => {
+  /* ------------------------------------------------------------------ photo
+   *
+   * Nobody should have to submit a report to find out what they attached. The chosen
+   * file is shown full size, from a local object URL — no upload, no round trip — so the
+   * decision to keep or replace it is made before anything is sent.
+   *
+   * The listener is delegated to the container rather than bound to the input, because
+   * removing a photograph replaces that input with a new one. Binding directly meant the
+   * second attempt at choosing a photograph silently did nothing.
+   */
+  const photoBox = mount.querySelector("#photoBox");
+  let photoUrl = null;
+
+  photoBox.addEventListener("change", (e) => {
+    if (e.target.id !== "photo") return;
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > MAX_PHOTO) {
-      toast(`That photo is ${kb(file.size)}. The limit is ${Math.round(MAX_PHOTO/1000)} KB.`, { error: true });
+      toast(`That photo is ${kb(file.size)}. The limit is ${Math.round(MAX_PHOTO/1000)} KB.`,
+            { type: "warning" });
       e.target.value = "";
       return;
     }
     photo = file;
-    const url = URL.createObjectURL(file);
-    mount.querySelector("#photoBox").innerHTML = `
-      <span style="position:relative;display:inline-block">
-        <img src="${url}" alt="Photograph you attached" style="width:64px;height:64px;object-fit:cover;border-radius:var(--r-sm)">
-        <button type="button" id="dropPhoto" aria-label="Remove photograph"
-                style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;
-                       background:var(--ink);color:#fff;border:0;cursor:pointer;display:grid;place-items:center">
-          ${icon("x",11)}</button>
-      </span>
-      <span class="xs">${esc(kb(file.size))}</span>`;
-    mount.querySelector("#dropPhoto").addEventListener("click", () => {
-      photo = null; URL.revokeObjectURL(url);
-      mount.querySelector("#photoBox").innerHTML = `
-        <label class="btn btn--ghost btn--sm" style="cursor:pointer">
-          ${icon("camera",16)} Add a photo
-          <input type="file" accept="image/jpeg,image/png,image/webp" id="photo" hidden></label>`;
-    });
+    if (photoUrl) URL.revokeObjectURL(photoUrl);
+    photoUrl = URL.createObjectURL(file);
+    photoBox.innerHTML = `
+      <figure style="margin:0">
+        <img src="${photoUrl}" alt="The photograph you are about to send"
+             style="width:100%;max-height:220px;object-fit:contain;background:var(--grey-100);
+                    border-radius:var(--r-sm);display:block">
+        <figcaption class="row-between" style="margin-top:8px">
+          <span class="xs">${esc(kb(file.size))} · check it shows what you mean</span>
+          <span class="inline">
+            <label class="btn btn--ghost btn--sm" style="cursor:pointer">Replace
+              <input type="file" accept="image/jpeg,image/png,image/webp" id="photo" hidden></label>
+            <button type="button" class="btn btn--ghost btn--sm" id="dropPhoto">Remove</button>
+          </span>
+        </figcaption>
+      </figure>`;
+  });
+
+  photoBox.addEventListener("click", (e) => {
+    if (e.target.closest("#dropPhoto") === null) return;
+    photo = null;
+    if (photoUrl) { URL.revokeObjectURL(photoUrl); photoUrl = null; }
+    photoBox.innerHTML = photoPicker();
   });
 
   /* ------------------------------------------------------------------ voice */
@@ -217,8 +240,9 @@ export default function reportView(mount) {
         stream.getTracks().forEach(t => t.stop());
         clearInterval(sizeTimer);
         recBtn.innerHTML = `${icon("mic",16)} Record again`;
-        recHint.textContent = `Recorded ${kb(voice.size)}. It will be sent with your report.`;
+        recHint.textContent = `Recorded ${kb(voice.size)}. Play it back before you send it.`;
         recHint.style.color = "";
+        showVoicePreview();
       };
 
       // Timeslice so ondataavailable fires while recording, not only at the end —
@@ -230,6 +254,28 @@ export default function reportView(mount) {
       toast("Microphone unavailable. A written note works too.", { error: true });
     }
   });
+
+  /* Hear it before anybody else does. A recording made on a phone in traffic is as
+   * likely to be wind noise as speech, and the recorder is the only person who can tell.
+   * Played from a local object URL, so this works with no connection at all. */
+  function showVoicePreview() {
+    if (voiceUrl) URL.revokeObjectURL(voiceUrl);
+    voiceUrl = URL.createObjectURL(voice);
+    mount.querySelector("#voicePreview").innerHTML = `
+      <audio controls preload="metadata" src="${voiceUrl}"
+             style="width:100%;height:34px;margin-top:10px"></audio>
+      <button type="button" class="btn btn--ghost btn--sm" id="dropVoice"
+              style="margin-top:8px">Discard recording</button>`;
+    mount.querySelector("#dropVoice").addEventListener("click", () => {
+      voice = null;
+      URL.revokeObjectURL(voiceUrl); voiceUrl = null;
+      mount.querySelector("#voicePreview").innerHTML = "";
+      meter.textContent = `0 / ${Math.round(MAX_VOICE/1024)} KB`;
+      meterBar.style.width = "0";
+      recBtn.innerHTML = `${icon("mic",16)} Hold to speak`;
+      recHint.textContent = "Recording stops by itself at the limit. You will be warned at 80%.";
+    });
+  }
 
   /* ----------------------------------------------------------------- submit */
   form.addEventListener("submit", async (e) => {
@@ -255,8 +301,14 @@ export default function reportView(mount) {
         refreshQueue();
       } else if (result.duplicate) {
         toast("You had already sent that report.");
+      } else if (result.rejected?.length) {
+        // The report itself was accepted; the evidence was not. Say which, and say that
+        // the report stands — otherwise the user cannot tell what actually happened.
+        toast(`Reported, but your ${result.rejected.join(" and ")} could not be attached.`,
+              { type: "warning" });
+        setTimeout(() => refreshIncidents().catch(() => {}), 2500);
       } else {
-        toast("Reported. Thank you.");
+        toast("Reported. Thank you.", { type: "success" });
         setTimeout(() => refreshIncidents().catch(() => {}), 2500);
       }
       go("/");
@@ -272,6 +324,9 @@ export default function reportView(mount) {
       clearInterval(sizeTimer);
       if (recorder?.state === "recording") recorder.stop();
       stream?.getTracks().forEach(t => t.stop());
+      // An object URL holds its blob in memory until it is revoked.
+      if (photoUrl) URL.revokeObjectURL(photoUrl);
+      if (voiceUrl) URL.revokeObjectURL(voiceUrl);
     },
   };
 }

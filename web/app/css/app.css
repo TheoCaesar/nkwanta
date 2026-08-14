@@ -113,6 +113,7 @@
   .stack > * + * { margin-top:var(--s3) }
   .row-between { display:flex; align-items:center; justify-content:space-between; gap:var(--s3) }
   .inline { display:flex; align-items:center; gap:var(--s2); flex-wrap:wrap }
+  .centerCap { text-align:center; text-transform:uppercase}
   .grow { flex:1; min-width:0 }
 
   .appbar {

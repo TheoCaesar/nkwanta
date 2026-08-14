@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import ControlRoom, CurrentUser, OptionalUser, WardenOnly
+from app.config import Settings, get_settings
 from app.confidence import THRESHOLD_STALE, THRESHOLD_VERIFIED
 from app.db import get_session
 from app.lifecycle import IllegalTransition, allowed_actions
@@ -43,6 +44,7 @@ from app.schemas import (
     ResolveResponse,
     WardenResponse,
 )
+from app.routers.attachments import attachment_url
 from app.services import dispatch
 from app.services.attachments import may_play
 
@@ -122,6 +124,7 @@ async def dispatch_queue(
 async def get_incident(
     incident_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
     viewer: OptionalUser = None,
 ) -> IncidentDetailResponse:
     """The screen that makes confidence explainable.
@@ -179,7 +182,7 @@ async def get_incident(
                         byte_size=a.byte_size,
                         duration_seconds=a.duration_seconds,
                         created_at=a.created_at,
-                        url=f"/attachments/{a.id}",
+                        url=attachment_url(a, settings.jwt_secret),
                         is_public=a.is_public,
                     )
                     for a in attachments.get(link.report_id, [])

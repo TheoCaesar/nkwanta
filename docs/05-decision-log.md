@@ -9,6 +9,77 @@ Format: what was decided, what else was considered, why, and what it costs.
 
 ---
 
+## 14 August 2026 — serving the evidence
+
+### D-043 — Attachment URLs are signed and short-lived
+
+**Decided:** When the API returns an attachment to a caller `may_play` has already
+cleared, it appends a signed token to the URL: `/attachments/{id}?t=…`. The token names
+one attachment, expires in ten minutes, and carries an audience claim so it can never be
+used as a login token or vice versa. The `Authorization` header route still works and is
+still checked first.
+
+**Considered:** fetching the bytes in JavaScript with the bearer token and turning them
+into an object URL; a session cookie alongside the header; and making every attachment
+public, which would have made the problem disappear by deleting the requirement.
+
+**Why:** This fixes a bug that made a whole feature unusable, and the cause is worth
+stating precisely. **`<img src>` and `<audio src>` cannot send a header.** The browser
+issues those requests itself and there is no hook to add one. Every other request in this
+system proves who is asking with `Authorization: Bearer …`, so a private attachment was
+in practice invisible to *everybody* — including the person who had just uploaded it, who
+could see it listed and could not open it. Pasting the URL into the address bar failed the
+same way, which is exactly what it looked like from the outside: a blank image and a bare
+`{"detail":"No such attachment."}`.
+
+The object-URL alternative works and needs no new signing code, but it cannot be linked,
+cannot be opened in a new tab, holds the whole file in memory, and defeats range requests
+so a recording cannot be scrubbed. The cookie brings CSRF back into a system that
+currently has none by construction.
+
+This is the mechanism behind an S3 presigned URL, and for the same reason: check the
+entitlement once, where the caller is known, then carry it in the URL to a place where
+they are not.
+
+**Costs.** Anyone holding the URL can load the file until it expires — the token is a
+capability, not an identity. Mitigated by the ten-minute life and by scoping it to one
+attachment, and accepted on the grounds that anyone who can read the URL could have been
+handed the bytes anyway. It also means the URL is not stable, so it cannot be cached by
+the service worker or bookmarked. Both are correct for private evidence.
+
+---
+
+### D-042 — A photograph is shared by default; a recording is not
+
+**Decided:** `POST /reports/{id}/photo` defaults `share_publicly` to **true**;
+`POST /reports/{id}/voice` keeps its default of **false**. Either can be withdrawn
+afterwards through the same endpoint.
+
+**Considered:** both private, which is what shipped and was wrong; both public, which
+throws away D-029; and asking for a photograph with the same checkbox as a recording.
+
+**Why:** D-029 established consent for recordings, and the reasoning there was specific
+even though the implementation was not. **A recording carries the reporter's voice.**
+Sharing it exposes the person making the accusation, which is precisely what NFR-4a
+exists to prevent. That reasoning does not transfer to a photograph of a flooded road: it
+describes the road, not the photographer.
+
+Inheriting the private default gave the worst of both. A photograph is the single most
+useful thing you can show another commuter deciding whether to take that route, and no
+commuter ever saw one — while the actual privacy interest, the voice, was protected by a
+default nobody had thought about separately.
+
+Withdrawal still applies, because a photograph can catch a face or a number plate the
+person taking it did not notice. What changes is which way the default points, and the
+default should point at the answer most people would give.
+
+**Costs.** A reporter who did not read the label has shared a photograph they might not
+have chosen to. Mitigated by the withdrawal endpoint and by the 250 KB cap, which rules
+out anything with much incidental detail — and weighed against the cost of the previous
+default, which was a feature that silently did nothing.
+
+---
+
 ## 14 August 2026 — the words and numbers the interface shows
 
 ### D-041 — Evidence is opened per report, not summarised per incident
