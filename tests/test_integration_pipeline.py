@@ -19,6 +19,21 @@ machine with no database. Run it deliberately:
     pytest tests/test_integration_pipeline.py -v
 
 Everything it creates is deleted afterwards, including when an assertion fails.
+
+
+A WARNING THESE TESTS LEARNED THE HARD WAY
+------------------------------------------
+Development and production share one Neon database (TD-18), and **both run an outbox
+worker**. So while these tests are running, something else may be draining the same queue.
+
+That is not a flaw to be worked around with sleeps — it is the real deployment, and a
+test that only passes when the rest of the system is switched off is testing the wrong
+thing. Assertions here are therefore about *what must be true*, not about *what has not
+happened yet*: that a row exists and is correctly linked, rather than that nobody has
+touched it.
+
+One test asserted the latter, passed for a whole session, and failed the moment the
+application was actually running.
 """
 
 from __future__ import annotations
@@ -160,6 +175,18 @@ async def test_postgis_is_actually_installed(db) -> None:
 async def test_submitting_a_report_writes_an_outbox_row_in_the_same_transaction(
     db, reporter
 ) -> None:
+    """The report and its outbox row are committed together.
+
+    **This test used to assert `processed_at is None`, and that was a mistake.** It
+    passed in isolation and failed the moment the system was actually running: a worker
+    — the local development server, or the deployed instance, both pointing at the same
+    Neon database (TD-18) — drained the row within two seconds of it being written.
+
+    The property being tested is that the row *exists* and belongs to this report.
+    Whether it has been processed yet is somebody else's business, and asserting it made
+    this test depend on nothing else being alive. A test that only passes when the system
+    is switched off is testing the wrong thing.
+    """
     report = await _submit(db, reporter, *CIRCLE[0])
 
     async with db() as session:
@@ -167,9 +194,14 @@ async def test_submitting_a_report_writes_an_outbox_row_in_the_same_transaction(
             select(OutboxMessage).where(OutboxMessage.aggregate_id == report.id)
         )
 
-    assert msg is not None
-    assert msg.processed_at is None
+    assert msg is not None, "no outbox row was written alongside the report"
+    assert msg.aggregate_type == "report"
+    assert msg.event_type == "report.submitted"
     assert msg.idempotency_key == f"report.submitted:{report.id}"
+    assert msg.payload["report_id"] == str(report.id)
+    # Never retried into failure, whoever processed it.
+    assert msg.attempts == 0
+    assert msg.last_error is None
 
 
 @pytest.mark.asyncio
@@ -230,15 +262,24 @@ async def test_coordinates_survive_the_round_trip(db, reporter) -> None:
 
 @pytest.mark.asyncio
 async def test_the_outbox_row_is_marked_processed(db, reporter) -> None:
+    """Whoever drains it — this worker, or one already running — the row ends up marked.
+
+    Safe to assert in either direction because the outcome is the same: the point of
+    `FOR UPDATE SKIP LOCKED` is that two workers processing the same queue reach one
+    answer rather than fighting over it.
+    """
     report = await _submit(db, reporter, *CIRCLE[0])
 
     worker = OutboxWorker(db, get_settings())
-    await worker.drain_once()
+    for _ in range(3):
+        await worker.drain_once()
+        async with db() as session:
+            msg = await session.scalar(
+                select(OutboxMessage).where(OutboxMessage.aggregate_id == report.id)
+            )
+        if msg.processed_at is not None:
+            break
 
-    async with db() as session:
-        msg = await session.scalar(
-            select(OutboxMessage).where(OutboxMessage.aggregate_id == report.id)
-        )
     assert msg.processed_at is not None
     assert msg.last_error is None
 
@@ -259,6 +300,75 @@ async def test_draining_twice_does_not_duplicate_incidents(db, reporter) -> None
 
     assert len(first) == len(second) == 1
     assert first[0].report_count == second[0].report_count
+
+
+@pytest.mark.asyncio
+async def test_demo_cleanup_removes_reports_it_did_not_seed(db) -> None:
+    """A regression test for a bug found by running the thing.
+
+    `clear_demo_data` used to delete only the reports it had seeded, assuming that was
+    everything a demo account could own. The moment anyone used the application as
+    `commuter@nkwanta.demo`, that account had reports with random ids — and
+    `reports.reporter_id` is ON DELETE RESTRICT, so deleting the user was refused.
+
+    The RESTRICT is correct: deleting a user must never silently erase the reports that
+    justified sending a warden somewhere. The cleanup had to change instead.
+    """
+    from app.services.seed import SEED_USERS, _id, clear_demo_data, seed
+
+    commuter_id = _id("user", "commuter")
+
+    try:
+        async with db() as session:
+            await seed(session)
+
+        # A report filed the way a person files one: no seed id, no seed idempotency key.
+        async with db() as session:
+            user = await session.get(User, commuter_id)
+            assert user is not None, "seed did not create the demo commuter"
+            await submit_report(
+                session,
+                user,
+                ReportCreate(
+                    incident_type=IncidentType.SURFACE_DEFECT,
+                    latitude=CIRCLE[0][0],
+                    longitude=CIRCLE[0][1],
+                    occurred_at=dt.datetime.now(dt.timezone.utc),
+                ),
+            )
+
+        # Must not raise a RestrictViolationError.
+        async with db() as session:
+            await clear_demo_data(session)
+
+        async with db() as session:
+            remaining_users = list(
+                await session.scalars(
+                    select(User.id).where(User.id.in_([_id("user", u.key) for u in SEED_USERS]))
+                )
+            )
+            orphan_reports = list(
+                await session.scalars(select(Report.id).where(Report.reporter_id == commuter_id))
+            )
+
+        assert remaining_users == []
+        assert orphan_reports == []
+
+    finally:
+        # PUT THE DEMONSTRATION DATA BACK.
+        #
+        # This test proves that clearing works, which means its natural end state is a
+        # database with no demonstration accounts in it. On a machine where tests and the
+        # running application share one database (TD-18) that is destructive: it deleted
+        # every demo account mid-session, and the next attempt to sign in as
+        # commuter@nkwanta.demo failed with a 401 that looked like a bug in
+        # authentication.
+        #
+        # A test that mutates shared state has to restore it. Reseeding here is not
+        # tidiness — it is the difference between a test suite you can run at any time
+        # and one that quietly breaks your demonstration.
+        async with db() as session:
+            await seed(session)
 
 
 @pytest.mark.asyncio

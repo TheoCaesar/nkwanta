@@ -9,6 +9,79 @@ Format: what was decided, what else was considered, why, and what it costs.
 
 ---
 
+## 13 August 2026 — front end and interface design
+
+### D-038 — Avatars are initials; nobody uploads a profile photograph
+
+**Decided:** Every avatar is initials on a disc, coloured deterministically from the user
+id. There is no profile photograph upload for any role.
+
+**Considered:** photographs for everyone, which is what users expect; and a staff-only
+variant where wardens and officers upload one but commuters keep initials.
+
+**Why:** A face attached to a name that already appears in an officer's evidence list
+makes a reporter easier to identify, and **NFR-4a exists precisely to prevent that** — it
+is the same requirement that defaults voice notes to private. No decision the system makes
+is improved by knowing what a reporter looks like, so it is personal data with no
+operational purpose. It would also add binary to PostgreSQL, already the debt most likely
+to fail first under adoption (TD-19), and create a moderation burden with no moderator.
+
+The staff-only variant was genuinely defensible — a warden is public-facing and
+recognition helps an officer assigning one — and was set aside as complexity for a gain
+the system does not need.
+
+**Costs.** Looks less conventional than a product with photographs. Mitigated by treating
+initials as a designed element rather than a placeholder, so the interface reads as
+finished.
+
+---
+
+### D-037 — No front-end framework; native ES modules, no build step
+
+**Decided:** The rebuilt interface uses native ES modules, plain CSS with custom
+properties, and no bundler. If reactivity becomes unwieldy, Alpine.js from a CDN — still
+no build.
+
+**Considered:** React or Vue, which is the default expectation for an interface of this
+quality.
+
+**Why:** A framework requires a build step, which means Node in the deployment pipeline —
+either a separate host, undoing D-012, or a build stage on Render. Deployment is worth 3
+marks and is pass-or-fail, and that risk buys nothing the design needs: "modern and high
+quality" is a consistent spacing scale, a restrained type scale, semantic colour tokens,
+real loading and empty states, and sparing motion. None of that is a framework feature.
+
+Native modules provide components and imports with zero tooling, and the deployed artefact
+stays exactly what it is in the repository — which also makes it easier to explain.
+
+**Costs.** More manual DOM work, and state synchronisation must be written rather than
+inherited. Acceptable at roughly eight views.
+
+---
+
+### D-036 — The front-end budget was revisited late, and that was an error
+
+**Decided:** Rebuild the interface to match the scope the API had already reached.
+
+**Why this is recorded as a mistake rather than a plan:** D-010 cut the front end to 1.2
+hours because implementation carried only 10 of 48 marks. That was correct under the
+original constraint. When the deadline extended and the observed build rate proved far
+higher than estimated (D-017), scope was revisited for the officer workflow, voice notes,
+corridors and the circuit breaker — **and the front-end budget was not revisited with
+them.** The API grew to Tier 2 while the page stayed at Tier 0.
+
+The result was an interface with no role differentiation, no profile, no photo upload
+despite a tested endpoint for it, and no validation worth the name. It was raised in
+review by the author, not noticed by me.
+
+**The lesson, stated plainly:** when a constraint that produced a decision changes, every
+decision derived from it needs revisiting, not just the ones currently being worked on.
+
+**Costs.** A full interface rebuild late in the schedule. Mitigated by building alongside
+the existing page rather than replacing it, so a working demonstration exists throughout.
+
+---
+
 ## 13 August 2026 — C circuit breaker and clearance
 
 ### D-035 — Every time-dependent module takes `now` as an argument

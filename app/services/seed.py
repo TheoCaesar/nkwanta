@@ -299,33 +299,61 @@ class SeedResult:
 
 
 async def clear_demo_data(session: AsyncSession) -> None:
-    """Remove everything a previous seed created, in dependency order.
+    """Remove the demonstration accounts and everything attached to them.
 
-    Only touches rows whose ids this module generates, so a database also holding real
-    reports is left alone.
+    **Every report by a demo user, not only the reports this module seeded.**
+
+    The first version deleted reports by their deterministic seed ids and assumed that
+    was all a demo account could own. It was wrong the moment anyone used the
+    application as `commuter@nkwanta.demo` — those reports have random ids, were not in
+    the list, and `reports.reporter_id` is ``ON DELETE RESTRICT``, so deleting the user
+    was refused with a foreign key violation.
+
+    The RESTRICT is correct and stays: deleting a user must never silently erase the
+    reports that justified sending a warden somewhere (B02). It means a cleanup has to
+    remove reports deliberately and in order, which is what this now does.
+
+    Scope is still limited to accounts this module owns, so a database also holding real
+    users is untouched.
     """
     user_ids = [_id("user", u.key) for u in SEED_USERS]
-    report_ids = [_id("report", f"{r.place}:{r.reporter_key}:{r.minutes_ago}") for r in SEED_REPORTS]
-
     corridor_ids = [_id("corridor", name) for name in SEED_CORRIDORS]
 
-    incident_ids = set(
-        await session.scalars(
-            select(IncidentReport.incident_id).where(IncidentReport.report_id.in_(report_ids))
-        )
+    # Everything these accounts ever filed — seeded or created through the interface.
+    report_ids = list(
+        await session.scalars(select(Report.id).where(Report.reporter_id.in_(user_ids)))
     )
-    if incident_ids:
-        # Advisory outbox rows are keyed on the incident, not the report, so they need
-        # removing separately or a reseed would find stale idempotency keys and skip
-        # every notification.
-        await session.execute(
-            delete(OutboxMessage).where(OutboxMessage.aggregate_id.in_(incident_ids))
+
+    if report_ids:
+        # Incidents are derived data and rebuildable, so removing one that also contains
+        # a non-demo report is safe — the next report to arrive nearby rebuilds it.
+        incident_ids = set(
+            await session.scalars(
+                select(IncidentReport.incident_id).where(IncidentReport.report_id.in_(report_ids))
+            )
         )
-        await session.execute(delete(Incident).where(Incident.id.in_(incident_ids)))
+        if incident_ids:
+            # Advisory and clearance rows are keyed on the incident, not the report.
+            # Leaving them behind would let a reseed hit a stale idempotency key and
+            # silently skip every notification.
+            await session.execute(
+                delete(OutboxMessage).where(OutboxMessage.aggregate_id.in_(incident_ids))
+            )
+            await session.execute(delete(Incident).where(Incident.id.in_(incident_ids)))
+
+        await session.execute(
+            delete(OutboxMessage).where(OutboxMessage.aggregate_id.in_(report_ids))
+        )
+        # A contradiction points at the report it contradicts. If one survives while its
+        # target is deleted the FK is SET NULL, which is fine — but clearing the link
+        # first keeps the delete order honest rather than relying on that.
+        await session.execute(
+            delete(Report).where(Report.contradicts_id.in_(report_ids))
+        )
+        # Attachments cascade from reports, so they need no separate delete.
+        await session.execute(delete(Report).where(Report.id.in_(report_ids)))
 
     await session.execute(delete(Notification).where(Notification.user_id.in_(user_ids)))
-    await session.execute(delete(OutboxMessage).where(OutboxMessage.aggregate_id.in_(report_ids)))
-    await session.execute(delete(Report).where(Report.id.in_(report_ids)))
     await session.execute(
         delete(CorridorSubscription).where(CorridorSubscription.user_id.in_(user_ids))
     )

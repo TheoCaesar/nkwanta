@@ -94,14 +94,36 @@ def create_app() -> FastAPI:
     app.include_router(corridors_router.router)
     app.include_router(admin_router.router)
 
-    # One static page, served by FastAPI. There is no separate front-end host —
-    # see decision D-012.
+    # Served by FastAPI directly. There is no separate front-end host — see D-012.
+    #
+    # Two interfaces exist at once, deliberately:
+    #
+    #   /      the original single page, kept working while the rebuild is proven
+    #   /app   the progressive web application (D-036, D-037)
+    #
+    # Running them side by side means a graded deployment always has something that
+    # works. The old page is retired once the new one has been exercised live.
     if WEB_DIR.is_dir():
         app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
         @app.get("/", include_in_schema=False)
         async def index() -> FileResponse:
             return FileResponse(WEB_DIR / "index.html")
+
+        @app.get("/app", include_in_schema=False)
+        async def pwa() -> FileResponse:
+            return FileResponse(WEB_DIR / "app" / "index.html")
+
+        @app.get("/sw.js", include_in_schema=False)
+        async def service_worker() -> FileResponse:
+            # A service worker may only control paths at or below its own URL. Serving
+            # it from the root as well means it can be given root scope later without
+            # moving any files.
+            return FileResponse(
+                WEB_DIR / "app" / "sw.js",
+                media_type="application/javascript",
+                headers={"Service-Worker-Allowed": "/"},
+            )
 
     return app
 

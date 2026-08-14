@@ -9,6 +9,108 @@ what comes next.
 
 ---
 
+## 13 August 2026 — Session 17: the interface rebuilt as a PWA
+
+### What happened
+
+**The interface was rebuilt**, after review found it had been left at Tier 0 while the API
+grew to Tier 2. Recorded as **D-036**, and recorded as my error rather than as a plan: when
+the deadline extended and scope was revisited, the front-end budget was not revisited with
+it. The general lesson is written into the entry — *when a constraint that produced a
+decision changes, every decision derived from it needs revisiting, not only the ones
+currently being worked on.*
+
+**Both interfaces now run side by side.** `/` is the original page, `/app` is the new one.
+A graded deployment should never be one bad commit from having nothing to show; the old
+page retires once the new one has been exercised live.
+
+### What was built
+
+Three API endpoints the design needed and that did not exist — `PATCH /auth/me`,
+`POST /auth/me/password`, `PATCH /auth/users/{id}`. The last one is only a route: `is_active`
+has been on the model and checked on every request since B03, with no way to set it.
+
+A progressive web application in `web/app/` — **no framework and no build step** (**D-037**).
+Native ES modules, plain CSS with custom properties. A bundler would put Node in the
+deployment pipeline, and deployment is pass-or-fail for three marks; it buys nothing the
+design needs, because "modern" here is a spacing scale, a type scale, semantic tokens and
+real states, none of which are framework features.
+
+Twelve modules: `api` (with the offline queue), `store`, `router`, `ui`, and eight views —
+map, report, alerts, routes, profile, auth, dispatch, admin. Plus a service worker, a
+manifest, and generated icons including a maskable one.
+
+### Decisions worth defending
+
+**Offline report queuing.** A report filed with no signal goes to IndexedDB and sends
+itself when the connection returns. This is only safe because of a decision made at B04,
+long before there was a client: every report carries an idempotency key generated **at
+capture**, so the same physical report keeps one identity however many times it is
+retried. NFR-2 asks for this; the design paid for it months earlier.
+
+**The service worker is deliberately conservative.** GET only — a cached POST would mean a
+report appearing to succeed twice. Attachments and `/auth/` are never cached, because a
+recording identifies its speaker and a cached token outlives a sign-out. Stale responses
+are labelled so the interface can say "showing what was last loaded" rather than pretend.
+It does not use Background Sync: that API is absent on iOS, and a queue that works on some
+phones is worse than one that works predictably on all of them.
+
+**Avatars are initials** (**D-038**). A face beside a name in an officer's evidence list
+makes a reporter easier to identify, which is what NFR-4a exists to prevent.
+
+**Dark mode is a use case, not a preference** — this is read at night, in a car, at arm's
+length.
+
+### Three test failures worth recording
+
+All three were the test being wrong rather than the code, and two were the same mistake.
+
+**Optional chaining broke the endpoint extractor.** `${inc.evidence[0]?.report_id}`
+contains a question mark, and the regex stripped query strings *before* template
+expressions — truncating the path mid-expression. Order now reversed, with the reason in
+the docstring.
+
+**`addAll` and `localStorage` both matched their own explanatory comments.** A test that
+greps source text is testing the prose as well as the behaviour. Both now check for the
+call — `cache.addAll(`, `localStorage.` — rather than the word.
+
+**The focus test was too blunt.** It forbade `outline:none` outright, but the text inputs
+trade the outline for a coloured ring, which is both accessible and better looking. The
+rule is not "never remove an outline", it is "never leave a focused element unmarked", and
+the test now parses each `:focus` rule and checks for a replacement.
+
+### Verified
+
+| Check | Result |
+|---|---|
+| Full suite | **379 passed, 8 skipped** |
+| All twelve ES modules parse | pass (checked with node) |
+| Every endpoint the app calls exists in the schema | pass |
+| Every manifest icon is served | pass |
+| Every shell file the worker lists exists | pass |
+| Service worker caches GET only, never attachments or auth | pass |
+| No token or secret embedded; no localStorage | pass |
+| Registration form has no role field | pass |
+| Map failure degrades rather than blanks the view | pass |
+| Focus visible, reduced motion, dark mode, 44px targets | pass |
+
+### Unresolved
+
+1. **Nothing pushed since session 14.** Migrations, reseed, commit, push, then click
+   through `/app` on the live deployment.
+2. Clearance still has no integration test and is not visible in the seeded demo.
+3. The old page at `/` is still there by design, and should be retired once `/app` is
+   proven.
+
+### Next actions, in order
+
+1. `alembic upgrade head`, `python -m scripts.seed_demo --reset`, `pytest`, push
+2. Exercise `/app` live — install it, turn off data, file a report, watch it queue and send
+3. The five submission documents: SRS, Testing Report, Technical Debt Plan, User Manual,
+   consolidated Project Documentation
+
+---
+
 ## 13 August 2026 — Session 16: B22 the web page — the build is complete
 
 ### What happened

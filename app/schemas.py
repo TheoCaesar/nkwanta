@@ -57,6 +57,37 @@ class UserResponse(BaseModel):
     created_at: dt.datetime
 
 
+class UpdateMeRequest(BaseModel):
+    """What you may change about yourself.
+
+    **Display name only.** Email is absent because it is the login identifier and changing
+    it needs a verification message this system cannot send. Role is absent for the same
+    reason registration has no role field — an input that does not exist cannot be
+    supplied, which is stronger than a check that could be forgotten.
+    """
+
+    display_name: str = Field(min_length=2, max_length=80)
+
+
+class ChangePasswordRequest(BaseModel):
+    """The current password is required.
+
+    Without it, anyone holding an unlocked phone could lock its owner out of their own
+    account. A valid session proves possession of a device, not knowledge of a secret.
+    """
+
+    current_password: str = Field(max_length=72)
+    new_password: str = Field(min_length=8, max_length=72)
+
+
+class UpdateUserByAdmin(BaseModel):
+    """Admin-only changes to somebody else's account. Every field optional — omitted
+    means unchanged, rather than meaning null."""
+
+    is_active: bool | None = None
+    role: UserRole | None = None
+
+
 class UserCreateByAdmin(BaseModel):
     """Only an admin may call this, and it is the only way to mint a privileged
     account. Wardens, officers and other admins are created here or seeded."""

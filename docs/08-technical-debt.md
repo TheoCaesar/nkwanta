@@ -52,6 +52,7 @@ urgent than debt that merely sits there.
 | TD-20 | Client-declared audio duration is unverified | A | Low | F |
 | TD-21 | Gateway can be deliberately broken on the live deployment | **C** | Low now, critical before real use | C |
 | TD-22 | Stored confidence decays only when the sweep runs | A | Low | C |
+| TD-23 | Demo reset deletes everything a demo account filed, not just seeded rows | A | Low | D |
 
 Items added during B02 onward are appended in build order.
 
@@ -278,6 +279,49 @@ stating plainly rather than dressing up.
 database the endpoint cannot be reached and the command-line script must run first. With
 a separate development database this would have surfaced during setup rather than at
 demonstration time.
+
+**Observed in practice, 13 August 2026.** An integration test asserted that a freshly
+written outbox row was still unprocessed. It passed for a full session and then failed —
+because the deployed instance and the local development server both run an outbox worker
+against this one database, and something drained the row within two seconds.
+
+The test was wrong rather than the system: it asserted *what had not happened yet* instead
+of *what must be true*. But it only became wrong once the application was genuinely
+running, which is the clearest demonstration of this debt item's cost so far. With a
+separate development database the queue would have been the test's own.
+
+---
+
+## TD-23 — Demonstration cleanup deletes real data belonging to demo accounts
+
+**Debt.** `clear_demo_data` removes **every** report filed by a demonstration account,
+not only the ones the seed created — because a demo account that has been used has
+reports the seed knows nothing about, and `reports.reporter_id` is `ON DELETE RESTRICT`.
+
+**Cause.** The demonstration accounts are also the accounts anyone signs in with to try
+the application. There is no separation between "seeded data" and "data created while
+demonstrating", so a reset cannot distinguish them.
+
+**Impact.** Anything filed while exploring the application as `commuter@nkwanta.demo` is
+destroyed by the next `--reset`. Harmless here, and would be unacceptable if those
+credentials were ever shared with a real user, because it is a published password
+attached to an account whose data is periodically deleted.
+
+It also deletes incidents that contain demo reports even when a non-demo report is part
+of the same cluster. That is safe rather than sloppy — incidents are derived data and the
+next report to arrive nearby rebuilds them — but it is worth knowing.
+
+**Priority.** Low for an examination artefact.
+
+**Class.** A — acceptable, because the accounts exist to be thrown away.
+
+**Proposed resolution.** Mark seeded rows explicitly with a `seeded_at` column or a
+dedicated flag, so a reset can remove exactly what it created and leave anything a person
+filed. Better still, resolve TD-18 and give demonstrations their own database.
+
+**Found by running it**, not by reading it: the first version of the cleanup assumed a
+demo account could only own seeded reports, and failed with a foreign key violation the
+first time anyone used the application as one. Regression test added.
 
 ---
 

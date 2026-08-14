@@ -43,7 +43,7 @@
   .row:last-child{border-bottom:0}
   .row .t{font-weight:500;font-size:.9rem}
   .row .m{font-size:.78rem;color:var(--muted);margin-top:.12rem}
-  .tag{font-size:.7rem;padding:.15rem .5rem;border-radius:5px;white-space:nowrap;font-weight:500}
+  .tag{font-size:.7rem;padding:.15rem .5rem;border-radius:5px;white-space:nowrap;font-weight:500;text-transform: uppercase;}
   .tag.verified{background:var(--red-soft);color:var(--red)}
   .tag.corroborated{background:var(--amber-soft);color:var(--amber)}
   .tag.reported{background:var(--grey-soft);color:var(--muted)}
@@ -88,10 +88,10 @@
       <h2>Live incidents</h2>
       <div id="map"></div>
       <div class="legend">
-        <span><i class="dot" style="background:#a32d2d"></i>verified</span>
-        <span><i class="dot" style="background:#ba7517"></i>corroborated</span>
-        <span><i class="dot" style="background:#888780"></i>unconfirmed</span>
-        <span><i class="dot" style="background:#185fa5"></i>warden assigned</span>
+        <span><i class="dot" style="background:#a32d2d; text-transform:uppercase"></i>verified</span>
+        <span><i class="dot" style="background:#ba7517; text-transform:uppercase"></i>corroborated</span>
+        <span><i class="dot" style="background:#888780; text-transform:uppercase"></i>unconfirmed</span>
+        <span><i class="dot" style="background:#185fa5; text-transform:uppercase"></i>warden assigned</span>
       </div>
       <p class="note" id="mapnote">Circle size follows confidence. Click a pin for the evidence behind it.</p>
     </div>
