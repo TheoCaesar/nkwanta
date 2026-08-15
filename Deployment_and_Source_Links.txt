@@ -16,8 +16,8 @@ This application is deployed on a free hosting tier. If it has been idle for mor
 than 15 minutes, the FIRST request may take up to 60 seconds while the instance
 wakes up. Every request after that is immediate.
 
-A keep-warm ping runs every 10 minutes to reduce the chance of this, but if the
-page seems slow to load, please allow it one minute before concluding it is down.
+If the page seems slow to load, please allow it one full minute before concluding
+it is down. This affects the first request only.
 
 --------------------------------------------------------------------------------
 LIVE APPLICATION
@@ -25,9 +25,13 @@ LIVE APPLICATION
 
 Live Application:  https://nkwanta.onrender.com/
 
-                   This is the application itself — the incident map, the
-                   report form and the dispatch queue. There is no separate
-                   front-end host: the page is served directly by the API.
+                   This is the application itself — an installable progressive
+                   web application. There is no separate front-end host: the
+                   page is served directly by the API.
+
+                   It opens on the public incident map, which needs no account.
+                   Signing in adds reporting, route alerts, and whichever tabs
+                   the account's role allows.
 
 Interactive API:   https://nkwanta.onrender.com/docs
                    Full API documentation, generated from the code. Every
@@ -37,9 +41,17 @@ Interactive API:   https://nkwanta.onrender.com/docs
 Service status:    https://nkwanta.onrender.com/ready
                    Confirms the database is reachable and PostGIS is installed.
 
-Admin URL:         There is no separate admin site. Administrative actions are
-                   API endpoints restricted by role — log in with the admin
-                   account below and use /docs. See "A note on roles".
+Admin URL:         https://nkwanta.onrender.com/#/admin
+
+                   Not a separate site — the same application. Sign in with the
+                   admin account below and an "Admin" tab appears in the
+                   navigation: system totals, account creation and role
+                   assignment, and the state of the outbound circuit breaker.
+
+                   Officers and wardens see a "Dispatch" tab in the same way,
+                   and commuters see neither. What each role can reach is
+                   decided by the API; the interface only draws what the API
+                   would allow. See "A note on roles".
 
 --------------------------------------------------------------------------------
 TEST CREDENTIALS
@@ -98,35 +110,70 @@ collapsed into a single upload.
 SUGGESTED FIVE-MINUTE WALKTHROUGH
 --------------------------------------------------------------------------------
 
-1. Open https://nkwanta.onrender.com/
-   The map shows current incidents, coloured by confidence. Allow up to 60
+1. Open https://nkwanta.onrender.com/  — no account needed.
+   The public map. Marker colour and size follow status. Allow up to 60
    seconds on the first load if the instance has been idle.
 
-2. Open https://nkwanta.onrender.com/docs
-   Log in as commuter@nkwanta.demo via POST /auth/login. Copy the
-   access_token from the response, click "Authorize" at the top right, and
-   paste it in.
+   Tap any marker. You are told what is blocking the road and how long ago,
+   then what an account would add. A signed-out visitor is deliberately not
+   shown who reported it, what they photographed, or the accuracy score --
+   all three describe the people rather than the road, and the score is built
+   from their credibility. The withholding is done by the API, not the page.
 
-3. POST /reports with latitude 5.6037 and longitude -0.1870 (Kwame Nkrumah
-   Circle) and incident_type "accident". Watch it appear on the map.
+2. Sign in as commuter@nkwanta.demo (password below).
+   The navigation appears. Tap the same marker again: the lock is replaced by
+   the reporters, their credibility, their notes, photographs and recordings.
+   Nothing that was already visible has moved.
 
-4. Try the same report with the coordinates swapped — latitude -0.1870 and
+3. Report -> choose a type -> "Use my location" -> Submit.
+   Attach a photograph and hold to record a voice note. The recorder stops
+   itself at the size limit rather than rejecting the upload afterwards, and
+   you can play back the recording before sending it.
+
+   The voice note is private by default. It carries your voice, so sharing it
+   is your choice and you can withdraw it later. Photographs default to
+   shared; a picture of a flooded road describes the road.
+
+   Then turn off your network and submit another report. It is queued on the
+   device and sends itself when the connection returns -- the key that makes
+   the retry safe is generated on the phone, at capture.
+
+4. Profile -> Your reports. Open one to see the note, the coordinates, and
+   the evidence you attached. This is where a reporter confirms their own
+   photograph or recording actually arrived.
+
+5. Sign in as officer@nkwanta.demo. A "Dispatch" tab appears that the
+   commuter account does not have.
+   The queue holds only incidents above 70% accuracy. Open Evidence on one:
+   the contributing reports, each reporter's credibility, and the weight each
+   report carried -- so the score can be interrogated rather than trusted.
+   Assign a warden.
+
+6. Sign in as warden@nkwanta.demo. Only what was assigned to you is shown.
+   Resolve it as "road now clear". The response names every reporter whose
+   credibility moved, and by how much. Resolving as "nothing there" moves
+   them the other way -- without that direction, a fabricated report would
+   cost its author nothing.
+
+   Note what is never offered: an incident below the threshold cannot be
+   assigned, and one nobody was sent to cannot be resolved. Those are the
+   state machine, not form validation, and the interface asks the API which
+   actions exist rather than deciding for itself.
+
+7. Sign in as admin@nkwanta.demo for the "Admin" tab: system totals, account
+   creation and role assignment, and the state of the outbound circuit
+   breaker. Nobody can register themselves as police -- roles are assigned
+   only from here.
+
+OPTIONAL, AND WORTH ONE MINUTE  --  https://nkwanta.onrender.com/docs
+
+   Log in via POST /auth/login, click "Authorize", paste the access_token.
+
+   Then POST /reports with the coordinates swapped -- latitude -0.1870 and
    longitude 5.6037. It is rejected with a message naming the likely cause.
    PostGIS orders points as (longitude, latitude), the reverse of how people
-   speak, and a swap silently moves Accra 600 km out into the Gulf of Guinea
+   speak, and a swap silently moves Accra 600 km into the Gulf of Guinea
    without raising anything. See docs/explainers/02.
-
-5. Log in as officer@nkwanta.demo to see the dispatch queue: incidents ranked
-   by confidence, with the contributing reports and the weight each one
-   carried, so the score can be explained rather than merely displayed.
-
-6. As the officer, assign a warden to a verified incident, then log in as
-   warden@nkwanta.demo and resolve it. Watch the reporters' reputations move
-   in the response. Resolving as "false_alarm" moves them the other way.
-
-   Note what is refused: an incident that is not yet verified cannot be
-   assigned, and an incident nobody was sent to cannot be resolved. Those
-   refusals are the state machine, not validation.
 
 --------------------------------------------------------------------------------
 WHERE TO FIND THINGS IN THE SUBMISSION

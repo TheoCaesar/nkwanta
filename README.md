@@ -43,6 +43,12 @@ section, then [`CLAUDE.md`](CLAUDE.md).
 | [`docs/07-build-schedule.md`](docs/07-build-schedule.md) | Hour-by-hour plan for the remaining clock, with cut triggers |
 | [`docs/08-technical-debt.md`](docs/08-technical-debt.md) | Live debt register — every shortcut, its cause and its repayment |
 | [`docs/09-system-design.md`](docs/09-system-design.md) | Architecture, data model, sequences, lifecycle, deployment — with UML |
+| [`docs/10-srs.md`](docs/10-srs.md) | Software Requirements Specification — 50 numbered requirements, traced to code and tests |
+| [`docs/11-testing-report.md`](docs/11-testing-report.md) | Testing strategy, coverage, and the defects the tests found |
+| [`docs/12-maintenance-and-evolution.md`](docs/12-maintenance-and-evolution.md) | Lehman's laws applied, the debt repayment plan, and what comes next |
+| [`docs/13-user-manual.md`](docs/13-user-manual.md) | How to use it, per role — written for users, not for an examiner |
+| [`docs/14-project-documentation.md`](docs/14-project-documentation.md) | The consolidated submission document — all nineteen required sections |
+| [`docs/diagrams/`](docs/diagrams/README.md) | Four hand-authored SVG diagrams, and where each one goes |
 | [`docs/design/ui-designs.html`](docs/design/ui-designs.html) | UI/UX specification — every screen, every role, signed out and in |
 | [`RUNBOOK.md`](RUNBOOK.md) | Run it locally, then deploy it. Written to be executed. |
 

@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 560" width="780" height="560" font-family="Segoe UI,system-ui,sans-serif">
+  <style>
+    .e{fill:#fff;stroke:#CBD6CF;stroke-width:1.2}
+    .core{fill:#fff;stroke:#0F6E56;stroke-width:1.8}
+    .hd{fill:#F1F5F2}
+    .hdc{fill:#E1F5EE}
+    .n{font-size:11.5px;fill:#0F1D18;font-weight:600}
+    .f{font-size:9px;fill:#3A4844}
+    .k{font-size:9px;fill:#0F6E56;font-weight:600}
+    .r{stroke:#8A968F;stroke-width:1.2;fill:none}
+    .rl{font-size:8.5px;fill:#6B7B74}
+    .note{font-size:9.5px;fill:#0F6E56;font-style:italic}
+  </style>
+
+  <rect class="e" x="20" y="20" width="150" height="104" rx="5"/>
+  <rect class="hd" x="20" y="20" width="150" height="20" rx="5"/><rect class="hd" x="20" y="33" width="150" height="7"/>
+  <text class="n" x="30" y="35">users</text>
+  <text class="k" x="30" y="54">id PK · email UK</text>
+  <text class="f" x="30" y="68">role  commuter warden</text>
+  <text class="f" x="30" y="80">      officer admin</text>
+  <text class="f" x="30" y="94">reputation  beta, 0.5</text>
+  <text class="f" x="30" y="106">reports_confirmed</text>
+  <text class="f" x="30" y="118">reports_contradicted</text>
+
+  <rect class="core" x="20" y="184" width="160" height="118" rx="5"/>
+  <rect class="hdc" x="20" y="184" width="160" height="20" rx="5"/><rect class="hdc" x="20" y="197" width="160" height="7"/>
+  <text class="n" x="30" y="199">reports</text>
+  <text class="k" x="30" y="218">id PK · reporter_id FK</text>
+  <text class="f" x="30" y="231">incident_type</text>
+  <text class="f" x="30" y="243">location  POINT 4326</text>
+  <text class="f" x="30" y="255">occurred_at · received_at</text>
+  <text class="f" x="30" y="267">note</text>
+  <text class="k" x="30" y="281">idempotency_key UK</text>
+  <text class="f" x="30" y="294">contradicts_id FK</text>
+
+  <rect class="e" x="20" y="360" width="160" height="94" rx="5"/>
+  <rect class="hd" x="20" y="360" width="160" height="20" rx="5"/><rect class="hd" x="20" y="373" width="160" height="7"/>
+  <text class="n" x="30" y="375">attachments</text>
+  <text class="k" x="30" y="394">id PK · report_id FK</text>
+  <text class="f" x="30" y="407">kind  photo | voice</text>
+  <text class="f" x="30" y="419">content_type · data</text>
+  <text class="f" x="30" y="431">byte_size  CHECK ≤ cap</text>
+  <text class="f" x="30" y="445">is_public  consent</text>
+
+  <rect class="e" x="290" y="196" width="150" height="66" rx="5"/>
+  <rect class="hd" x="290" y="196" width="150" height="20" rx="5"/><rect class="hd" x="290" y="209" width="150" height="7"/>
+  <text class="n" x="300" y="211">incident_reports</text>
+  <text class="k" x="300" y="230">incident_id PK FK</text>
+  <text class="k" x="300" y="243">report_id PK FK</text>
+  <text class="f" x="300" y="256">weight  stored</text>
+
+  <rect class="core" x="540" y="170" width="180" height="130" rx="5"/>
+  <rect class="hdc" x="540" y="170" width="180" height="20" rx="5"/><rect class="hdc" x="540" y="183" width="180" height="7"/>
+  <text class="n" x="550" y="185">incidents  — derived</text>
+  <text class="k" x="550" y="204">id PK</text>
+  <text class="k" x="550" y="217">cluster_key  stable id</text>
+  <text class="f" x="550" y="230">incident_type</text>
+  <text class="f" x="550" y="242">centroid  POINT 4326</text>
+  <text class="f" x="550" y="254">confidence · report_count</text>
+  <text class="f" x="550" y="266">status</text>
+  <text class="f" x="550" y="278">assigned_to_id FK</text>
+  <text class="f" x="550" y="292">resolution · resolved_at</text>
+
+  <rect class="e" x="540" y="360" width="180" height="80" rx="5"/>
+  <rect class="hd" x="540" y="360" width="180" height="20" rx="5"/><rect class="hd" x="540" y="373" width="180" height="7"/>
+  <text class="n" x="550" y="375">notifications</text>
+  <text class="k" x="550" y="394">id PK · user_id FK</text>
+  <text class="k" x="550" y="407">incident_key  cluster key</text>
+  <text class="f" x="550" y="419">corridor_id FK · message</text>
+  <text class="f" x="550" y="431">read_at</text>
+
+  <rect class="e" x="290" y="360" width="170" height="80" rx="5"/>
+  <rect class="hd" x="290" y="360" width="170" height="20" rx="5"/><rect class="hd" x="290" y="373" width="170" height="7"/>
+  <text class="n" x="300" y="375">corridors</text>
+  <text class="k" x="300" y="394">id PK · name UK</text>
+  <text class="f" x="300" y="407">path  LINESTRING 4326</text>
+  <text class="f" x="300" y="419">is_active</text>
+  <text class="f" x="300" y="433">— corridor_subscriptions</text>
+
+  <rect class="e" x="290" y="30" width="170" height="88" rx="5"/>
+  <rect class="hd" x="290" y="30" width="170" height="20" rx="5"/><rect class="hd" x="290" y="43" width="170" height="7"/>
+  <text class="n" x="300" y="45">outbox</text>
+  <text class="k" x="300" y="64">id PK</text>
+  <text class="f" x="300" y="77">aggregate_type / _id</text>
+  <text class="f" x="300" y="89">event_type · payload</text>
+  <text class="k" x="300" y="102">idempotency_key UK</text>
+  <text class="f" x="300" y="114">processed_at · attempts</text>
+
+  <path class="r" d="M100 124 L100 184"/><text class="rl" x="106" y="158">files</text>
+  <path class="r" d="M100 302 L100 360"/><text class="rl" x="106" y="335">carries</text>
+  <path class="r" d="M180 240 L290 229"/><text class="rl" x="196" y="228">contributes to</text>
+  <path class="r" d="M440 229 L540 235"/><text class="rl" x="456" y="224">built from</text>
+  <path class="r" d="M170 60 L290 68"/><text class="rl" x="186" y="56">one transaction</text>
+  <path class="r" d="M460 400 L540 400"/><text class="rl" x="470" y="394">triggers</text>
+  <path class="r" d="M630 300 L630 360" stroke-dasharray="3 3"/><text class="rl" x="636" y="335">warns about</text>
+  <path class="r" d="M170 90 L170 184" stroke-dasharray="3 3"/>
+
+  <text class="note" x="20" y="490">reports is append-only — no status, no soft-delete. A report that proves wrong is not edited; the incident is resolved as a false alarm.</text>
+  <text class="note" x="20" y="508">incidents is derived — it can be dropped and rebuilt by replaying reports. That is what makes changing the clustering rules safe.</text>
+  <text class="note" x="20" y="526">cluster_key is the smallest member report id: stable under merging, where a primary key is not. Notifications key on it, so a merge cannot re-warn.</text>
+  <text class="note" x="20" y="544">outbox.idempotency_key is unique — delivery is at-least-once, and the key is what makes the second delivery a no-op.</text>
+</svg>
