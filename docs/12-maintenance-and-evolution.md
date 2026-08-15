@@ -68,10 +68,10 @@ The four standard categories, with what each actually means here and who would d
 
 | Category | Share expected | What it looks like in Nkwanta |
 |---|---:|---|
-| **Corrective** — fixing defects | ~20% | Most defects here have been in the interface, not the domain. §5 says why that is likely to continue. |
+| **Corrective** — fixing defects | ~20% | Most defects here have been in the interface, not the domain. Section 5 says why that is likely to continue. |
 | **Adaptive** — reacting to a changing environment | ~30% | Dependency updates, PostGIS versions, browser behaviour, hosting changes. The largest single item is leaving the free tier. |
 | **Perfective** — improving what works | ~35% | Tuning the two clustering constants against real data. Everything else is secondary to that. |
-| **Preventive** — reducing future cost | ~15% | The debt register. §4 is the plan. |
+| **Preventive** — reducing future cost | ~15% | The debt register. Section 4 is the plan. |
 
 ### 3.1 Routine operations
 
@@ -145,7 +145,7 @@ actually been:
 
 | Area | Risk | Evidence |
 |---|---|---|
-| **The interface** | **Highest.** No end-to-end browser tests; the front end is verified by reading its source. | §4.4, §4.5, §4.6 of the testing report — three defects invisible to the suite, including offline never working |
+| **The interface** | **Highest.** No end-to-end browser tests; the front end is verified by reading its source. | Section 4.4, Section 4.5, Section 4.6 of the testing report — three defects invisible to the suite, including offline never working |
 | **Alembic drift** | **High.** No test applies the migration chain to an empty database and compares it to `Base.metadata`. | Not yet bitten. The most likely thing to bite. |
 | **The outbox under contention** | Medium | `FOR UPDATE SKIP LOCKED` is tested with one worker, never two competing |
 | **The domain core** | **Lowest** | 99% coverage, property-tested. Two of the eight known defects came from here, both found by Hypothesis before they reached anything. |
@@ -178,7 +178,7 @@ gateway, so the work is an adapter, not a redesign.
 ### 6.4 Reroute advisories — *deferred deliberately*
 
 Currently "your route is affected". A real alternative needs a routing engine and full road
-network data. Cut at scoping (`02-problem-and-scope.md` §4) and still the right call.
+network data. Cut at scoping (`02-problem-and-scope.md` Section 4) and still the right call.
 
 ### 6.5 Ride-sharing — *the headline exclusion, and it should stay excluded*
 

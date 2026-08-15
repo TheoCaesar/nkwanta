@@ -25,7 +25,7 @@ properties has been checked, by a specific method, and it names the ones that ha
 
 The usual testing pyramid assumes the expensive tests are the valuable ones. Here the
 opposite held, for a structural reason: **the domain layer touches no database, clock or
-network** (`09-system-design.md` §2). Calling `clustering.group()` costs nothing, so it can
+network** (`09-system-design.md` Section 2). Calling `clustering.group()` costs nothing, so it can
 be called ten thousand times with generated inputs.
 
 That made property-based testing affordable on exactly the code where correctness is
@@ -39,7 +39,7 @@ hardest to reason about — and it is where the real defects were found.
 | **Integration** | The real pipeline against real PostGIS | 9 | ~3.5 minutes |
 | **Document** | The SRS, the design document and this report, against the code they describe | 49 | instant |
 
-The last row is unusual and deliberate — see §5.
+The last row is unusual and deliberate — see Section 5.
 
 ---
 
@@ -209,7 +209,7 @@ Named rather than left to be discovered.
 |---|---|---|
 | **Clearance fan-out — FR-40** | `fan_out_clearance` is called by no test; `handle_incident_cleared` has never run in one; there is no assertion that it is registered in `HANDLERS`, though there is exactly that assertion for the advisory event. Deleting the registration would keep the suite green. | Declared Partial in the SRS |
 | **NFR-07 — 3-second load on 3G** | Never measured against a throttled connection. Stated as a target, not a result. | Declared unverified in the SRS |
-| **Browser end-to-end** | No Playwright or Selenium. The front end is tested by reading its source and checking it against the API — which catches renamed routes and missing handlers, and cannot catch anything about rendering. | Accepted; §4.6 is what this gap costs |
+| **Browser end-to-end** | No Playwright or Selenium. The front end is tested by reading its source and checking it against the API — which catches renamed routes and missing handlers, and cannot catch anything about rendering. | Accepted; Section 4.6 is what this gap costs |
 | **Load and concurrency** | `FOR UPDATE SKIP LOCKED` is tested for correctness with one worker, never with two competing. | Accepted |
 | **Security scanning** | No dependency audit, no static analysis, no penetration testing. Authorisation is tested per-route; the absence of vulnerabilities is not established. | Accepted |
 | **Migrations** | No test applies the Alembic chain to an empty database and compares it to `Base.metadata`. A drift between the two would not be caught. | Accepted, and the most likely to bite |
@@ -224,8 +224,8 @@ patterns rather than incidents.
 ### 8.1 Vacuous assertions
 
 **A test that asserts something about a collection must first assert the collection is not
-empty.** This produced three green-but-worthless tests: the clustering generator (§4.2),
-the route traversal (§4.3), and an endpoint extraction in the PWA tests that found nothing
+empty.** This produced three green-but-worthless tests: the clustering generator (Section 4.2),
+the route traversal (Section 4.3), and an endpoint extraction in the PWA tests that found nothing
 and was satisfied.
 
 Every affected test now carries a meta-assertion — `assert len(x) >= n, "this would pass
@@ -275,6 +275,6 @@ this process did the work.
 | Property-based | 35 properties × 150 examples (1000 in `thorough`) |
 | Statement coverage, overall | 69% |
 | Statement coverage, pure domain core | **99%** |
-| Defects found by tests rather than by use | 6 of the 8 in §4 |
+| Defects found by tests rather than by use | 6 of the 8 in Section 4 |
 | Requirements verified by a named test | 49 of 50 |
 | Non-functional requirements verified | 6 of 7 |

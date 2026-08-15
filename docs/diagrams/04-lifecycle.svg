@@ -60,5 +60,5 @@
   <text class="note" x="20" y="318">cleared by wishful thinking.</text>
   <text class="note" x="20" y="342">Both are policy, not validation. The whole machine is the RULES table in lifecycle.py; anything not listed there is impossible, and the API</text>
   <text class="note" x="20" y="358">returns allowed_actions so a button that would be refused is never drawn.</text>
-  <text class="note" x="20" y="382" fill="#6B7B74">Computed states move in both directions as reports arrive and decay. Decided states do not — a warden already sent does not un-send because confidence dipped.</text>
+  <text class="note" x="20" y="382" fill="#6B7B74">Computed states move both ways as reports arrive and decay. Decided states do not.</text>
 </svg>

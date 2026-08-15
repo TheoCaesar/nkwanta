@@ -92,7 +92,7 @@ decision to ship no front-end build step (D-037).
 
 | Constraint | Consequence |
 |---|---|
-| 48 hours (extended to 56), one person | Scope cut against a written estimate — see §6 |
+| 48 hours (extended to 56), one person | Scope cut against a written estimate — see Section 6 |
 | Free hosting only | One process, so the worker runs in-process (TD-01) |
 | No real road-network dataset | Corridors are hand-drawn; clustering constants are untuned (TD-03) |
 | No real user base | Reputation cannot be validated against reality, only against its own arithmetic |
@@ -308,7 +308,7 @@ to discover.
 ## 6. Requirements that were cut, and why
 
 Cutting deliberately against an estimate is itself a requirements activity. The full
-reasoning is in `02-problem-and-scope.md` §4 and `06-effort-estimation.md` §9.
+reasoning is in `02-problem-and-scope.md` Section 4 and `06-effort-estimation.md` Section 9.
 
 | Cut | Priority | Why | Where it went |
 |---|---|---|---|

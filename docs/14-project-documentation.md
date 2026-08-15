@@ -66,7 +66,7 @@ about to set out and the officer who can send someone.
 
 | # | Objective | Where it is met |
 |---|---|---|
-| 1 | Capture typed, located, timestamped reports from ordinary road users, safely and offline-tolerantly | SRS §3.2 |
+| 1 | Capture typed, located, timestamped reports from ordinary road users, safely and offline-tolerantly | SRS Section 3.2 |
 | 2 | Group reports describing one real event, **independent of arrival order** | SRS FR-19, FR-20 |
 | 3 | Score believability from reporter track record, decaying with age | SRS FR-21–FR-24 |
 | 4 | Warn commuters on affected routes, exactly once each | SRS FR-35–FR-40 |
@@ -108,7 +108,7 @@ This is the single most important requirements decision in the project. It conve
 sprawling brief into one well-engineered core, and it is what made the advanced concept
 affordable inside 48 hours.
 
-**Prioritisation** used MoSCoW, and the cuts are recorded with reasoning (SRS §6). Four
+**Prioritisation** used MoSCoW, and the cuts are recorded with reasoning (SRS Section 6). Four
 Won't-haves — ride-sharing, subscription transport, real emergency dispatch, fare
 adjudication — were each cut for a stated reason, not for lack of time. Ride-sharing alone
 is a second product: matching, payments, identity, passenger safety, liability, sharing
@@ -164,7 +164,7 @@ operates in conditions UCP does not model.
 
 **What the estimate actually did.** It made the cuts non-negotiable. 1,948 hours against 48
 available says plainly that the brief cannot be built, so the only question is what to
-remove — and the removals in §5 followed from the arithmetic rather than from taste. That
+remove — and the removals in Section 5 followed from the arithmetic rather than from taste. That
 is what estimation is for, and it is why it is worth 5 marks.
 
 ---
@@ -277,7 +277,7 @@ can be tested for.
 
 ## 12. Technical debt
 
-**Full document: `08-technical-debt.md`. Repayment plan: `12-maintenance-and-evolution.md` §4.**
+**Full document: `08-technical-debt.md`. Repayment plan: `12-maintenance-and-evolution.md` Section 4.**
 
 **Twenty-three items, every one recorded at the moment the shortcut was taken.** Each
 records Debt → Cause → Impact → Priority → Proposed Resolution, classified **A**
@@ -356,7 +356,7 @@ audit, and **a quarterly restore test — a backup nobody has restored is a hypo
 
 ## 16. Future evolution
 
-Ordered by value against cost to the existing design (`12-` §6):
+Ordered by value against cost to the existing design (`12-` Section 6):
 
 1. **Tune the clustering constants against real data.** Not a feature — the difference
    between a system that works and one that appears to. Everything else assumes the

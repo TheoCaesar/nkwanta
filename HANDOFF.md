@@ -9,6 +9,54 @@ what comes next.
 
 ---
 
+## 15 August 2026 — Session 29: the five Word documents
+
+`scripts/build_submission_docs.py` builds all five from the markdown, keeping the
+University of Ghana cover page from the supplied template. Diagrams are rasterised from
+the hand-authored SVGs and embedded. **Word, not PDF** — the conversion to PDF is the
+user's to do, and staying in Word costs nothing extra.
+
+### The approach, and why the obvious one fails
+
+Appending content to the template breaks numbering: pandoc generates its own
+`numbering.xml`, and a list spliced into a foreign document points at `numId` values that
+document has never heard of, so the bullets silently vanish. The direction is therefore
+reversed — **pandoc's output is the base and the cover is spliced into it**, with the
+template passed as `--reference-doc` so styles, headers, footers and page setup come
+across anyway. All that then has to move is the cover: plain paragraphs, one image, three
+field codes.
+
+### Four faults, each found by looking rather than assuming
+
+1. **`unbound prefix`, and Word refuses the file outright.** The cover uses `w14`, `mc`
+   and the `w16` family, which the template's root declares and pandoc's does not. The
+   two roots are now merged.
+2. **`--columns 9999` collapses every table.** For pipe tables pandoc derives each
+   column's *relative* width from its width in the source against that value, so a large
+   number makes every column a sliver. Removed.
+3. **Pandoc emits `tblW=0` and an empty self-closing `<w:tblGrid/>`.** Tables get a real
+   grid, per-cell widths weighted by content length, `tblLayout fixed`, and the
+   `TableGrid` style — the template defines that one and not the `Table` pandoc names.
+4. **Scratch inside the repository could not be deleted.** The build now works in a
+   temporary directory and copies the result in.
+
+### On verification, and on not trusting the instrument
+
+I rendered through LibreOffice and read the pages, and the tables looked broken. They are
+not. **LibreOffice here mishandles pandoc tables even when handed pandoc's own default
+template** — the control case lost two of three columns — so a bad render proved nothing,
+and a good one would only have proved LibreOffice agreed.
+
+The build now verifies structurally instead: the XML parses, every table has a grid, no
+table is entirely empty, every image reference resolves to a file in the package, and the
+crest is present. All five pass. The covers were checked by eye and are correct.
+
+**Worth stating plainly: the tables have not been confirmed in Word.** They are correct as
+XML, which is the strongest claim available from here. One file should be opened in Word
+before the set is submitted.
+
+---
+
 ## 15 August 2026 — Session 28: the consolidated document, and four diagrams
 
 `docs/14-project-documentation.md` — all nineteen required sections. **Every document
