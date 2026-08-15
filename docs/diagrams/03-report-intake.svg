@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 600" width="780" height="600" font-family="Segoe UI,system-ui,sans-serif">
+  <style>
+    .ln{stroke:#CBD6CF;stroke-width:1;stroke-dasharray:4 4}
+    .hd{fill:#F1F5F2;stroke:#CBD6CF;stroke-width:1.2}
+    .nm{font-size:10.5px;fill:#0F1D18;font-weight:600;text-anchor:middle}
+    .act{fill:#3A4844;font-size:10px}
+    .msg{stroke:#3A4844;stroke-width:1.2;fill:none;marker-end:url(#a)}
+    .ret{stroke:#8A968F;stroke-width:1.1;fill:none;stroke-dasharray:4 3;marker-end:url(#g)}
+    .tx{fill:#E1F5EE;stroke:#0F6E56;stroke-width:1.6}
+    .txl{font-size:10px;fill:#0F6E56;font-weight:700;letter-spacing:.06em}
+    .note{fill:#FBF0DC;stroke:#D9A406;stroke-width:1}
+    .nt{font-size:9px;fill:#854F0B}
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#3A4844"/></marker>
+    <marker id="g" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#8A968F"/></marker>
+  </defs>
+
+  <rect class="hd" x="20" y="16" width="94" height="26" rx="4"/><text class="nm" x="67" y="33">Reporter</text>
+  <rect class="hd" x="140" y="16" width="94" height="26" rx="4"/><text class="nm" x="187" y="33">Browser</text>
+  <rect class="hd" x="266" y="16" width="104" height="26" rx="4"/><text class="nm" x="318" y="33">reports API</text>
+  <rect class="hd" x="404" y="16" width="104" height="26" rx="4"/><text class="nm" x="456" y="33">PostgreSQL</text>
+  <rect class="hd" x="540" y="16" width="94" height="26" rx="4"/><text class="nm" x="587" y="33">worker</text>
+  <rect class="hd" x="660" y="16" width="100" height="26" rx="4"/><text class="nm" x="710" y="33">projection</text>
+
+  <line class="ln" x1="67" y1="42" x2="67" y2="572"/>
+  <line class="ln" x1="187" y1="42" x2="187" y2="572"/>
+  <line class="ln" x1="318" y1="42" x2="318" y2="572"/>
+  <line class="ln" x1="456" y1="42" x2="456" y2="572"/>
+  <line class="ln" x1="587" y1="42" x2="587" y2="572"/>
+  <line class="ln" x1="710" y1="42" x2="710" y2="572"/>
+
+  <path class="msg" d="M67 68 L185 68"/><text class="act" x="72" y="63">type, location, photo, voice</text>
+  <rect class="note" x="126" y="78" width="230" height="30" rx="4"/>
+  <text class="nt" x="134" y="92">The idempotency key is generated HERE,</text>
+  <text class="nt" x="134" y="103">at capture — not at send.</text>
+
+  <path class="msg" d="M187 128 L316 128"/><text class="act" x="192" y="123">POST /reports { …, idempotency_key }</text>
+
+  <rect class="tx" x="286" y="146" width="200" height="96" rx="5"/>
+  <text class="txl" x="296" y="162">ONE TRANSACTION</text>
+  <path class="msg" d="M318 182 L454 182"/><text class="act" x="324" y="177">INSERT report</text>
+  <path class="msg" d="M318 210 L454 210"/><text class="act" x="324" y="205">INSERT outbox row</text>
+  <text class="act" x="324" y="234" font-weight="600" fill="#0F6E56">COMMIT — both, or neither</text>
+
+  <path class="ret" d="M454 264 L320 264"/><text class="act" x="326" y="259">unique violation → the original report</text>
+  <rect class="note" x="286" y="274" width="240" height="26" rx="4"/>
+  <text class="nt" x="294" y="291">A duplicate is not an error. It is the same fact, twice.</text>
+
+  <path class="ret" d="M316 320 L189 320"/><text class="act" x="196" y="315">201 + report</text>
+  <path class="ret" d="M185 344 L69 344"/><text class="act" x="76" y="339">"Reported. Thank you."</text>
+
+  <rect class="note" x="126" y="356" width="250" height="30" rx="4"/>
+  <text class="nt" x="134" y="370">If offline: queued in IndexedDB and sent on</text>
+  <text class="nt" x="134" y="381">reconnection — same key, so the retry is harmless.</text>
+
+  <path class="msg" d="M587 410 L458 410"/><text class="act" x="392" y="405" text-anchor="end">SELECT … FOR UPDATE SKIP LOCKED</text>
+  <path class="msg" d="M587 434 L708 434"/><text class="act" x="594" y="429">rebuild</text>
+
+  <rect class="tx" x="424" y="450" width="316" height="90" rx="5"/>
+  <text class="txl" x="434" y="466">ONE TRANSACTION</text>
+  <path class="msg" d="M708 486 L458 486"/><text class="act" x="464" y="481">neighbours within 300 m / 30 min  (ST_DWithin, GiST)</text>
+  <path class="msg" d="M708 510 L458 510"/><text class="act" x="464" y="505">UPSERT incident · INSERT advisory rows</text>
+  <text class="act" x="464" y="532" font-weight="600" fill="#0F6E56">cluster · score · derive status</text>
+
+  <path class="msg" d="M587 564 L458 564"/><text class="act" x="464" y="559">mark the outbox row processed</text>
+</svg>

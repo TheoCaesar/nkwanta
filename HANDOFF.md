@@ -9,6 +9,209 @@ what comes next.
 
 ---
 
+## 15 August 2026 — Session 28: the consolidated document, and four diagrams
+
+`docs/14-project-documentation.md` — all nineteen required sections. **Every document
+required by the paper now exists in markdown.**
+
+It is written as a *consolidating* document: each section carries its own substance and
+points to the detailed document rather than duplicating it. A duplicated section is a
+section that will disagree with its original after the next change, and there are now
+fourteen documents that would have to be kept in step.
+
+### The diagrams
+
+`docs/diagrams/` — four hand-authored SVGs: architecture, data model, report intake, and
+the incident lifecycle. Plus a README saying **exactly** which document, which section and
+which paragraph each one goes after, with suggested figure captions.
+
+**Only four, and the reason is in the README rather than hidden.** Nine Mermaid diagrams
+exist in the design document. Mermaid needs a JavaScript renderer that most markdown-to-PDF
+converters lack, so a code fence arrives in a PDF as raw text. Hand-authoring all nine was
+not worth the effort against the marks at stake, so the four carrying the Analysis and
+Design section were done. The markdown keeps every Mermaid fence, so the repository still
+renders in full on GitHub.
+
+### On the PDF pass — corrected
+
+Asked whether converting to PDF costs more tokens than staying in markdown. **It does**,
+and the correction was worth making: the document content costs the same either way, and
+conversion is *additional* on top — running the tool, fixing page breaks, reading the output
+back to confirm it rendered. Markdown-only is strictly cheaper, and the PDFs are now the
+user's to build.
+
+`docs/diagrams/README.md` carries the build instructions: the five source→output mappings,
+two conversion routes (pandoc + weasyprint, or a markdown previewer's Print to PDF), the
+zip layout, and one warning worth repeating — **open every PDF before zipping, because a
+file that failed to convert looks identical to one that succeeded until somebody opens it.**
+
+### What is left
+
+No writing. Remaining: build the PDFs, assemble `22424543_Nkwanta/`, push `dev` and merge
+to `main` (origin/main is still behind), and `git rm web/index.html tests/test_web_page.py`.
+
+Still open and declared in three documents each: **FR-40 clearance is untested**, and
+**NFR-07 is unmeasured**.
+
+---
+
+## 14 August 2026 — Session 27: maintenance, evolution, and the user manual
+
+Two documents, `docs/12-maintenance-and-evolution.md` and `docs/13-user-manual.md`.
+**513 tests**, 15 of them new and checking these two.
+
+### Maintenance and evolution
+
+Built around the question that is actually assessed — not "what would we build next", which
+is a wish-list, but **what happens to this system when it is used, and was it built so that
+what happens next is affordable.**
+
+Lehman's three relevant laws, each with what was built against it. The first one has a real
+answer: continuing change predicts the two clustering constants will be wrong the moment a
+real commuter appears, and reports being permanent while incidents are *derived* is exactly
+the property that makes changing them cheap. Replay, get a new map, lose nothing.
+
+The debt repayment plan orders 23 items by **interest rate** — how much worse each gets on
+its own — rather than by how annoying they are. Both **C**-classified items go in Release 1,
+and there is a test asserting that, because a plan that schedules its own critical items
+late disagrees with its own register.
+
+§5 predicts where the next defects will come from, based on where they have actually been:
+the interface first (no browser tests, and three defects there were invisible to the suite),
+Alembic drift second (nothing compares the migration chain to `Base.metadata` — the most
+likely thing to bite that has not yet), the domain core last.
+
+§6.5 states plainly that ride-sharing should *stay* excluded, and why. There is a test for
+that too: an evolution plan that quietly reinstates the largest scope cut undoes the
+requirements decision it was cut by.
+
+### The user manual
+
+Written for users. Safety note first — never while driving, and the system does not call an
+ambulance — because a manual that explains reporting before it says that has put the
+instruction where nobody reads it. There is a test asserting it appears in the first 1,200
+characters.
+
+The rest is per role, plus a troubleshooting table and honest answers to the questions the
+design provokes: why an incident disappeared, why the accuracy figure went *down*, and why
+a report cannot be deleted.
+
+### What the tests check
+
+A manual is the document most likely to rot — it describes behaviour, and nothing breaks
+when it drifts. It is also the one a user trusts most literally. So: the password rule it
+states matches the `Field(min_length=...)`, the thresholds and the 45-minute half-life match
+the constants, every one of the six incident types is described, **every demonstration
+account it lists is actually seeded**, and it does not promise more privacy than the code
+delivers.
+
+One test failed on first run and the manual was right — the regex assumed the sentence was
+on one line, and the document is hard-wrapped. A test that asserts on typography rather than
+content. Fixed with `\s+`.
+
+---
+
+## 14 August 2026 — Session 26: the testing report
+
+`docs/11-testing-report.md`. Ten sections, and the number that carries it is measured
+rather than asserted: **69% statement coverage overall, 99% on the pure domain core.**
+
+That gap *is* the story of this project's testing, and stating both numbers is better than
+stating either. The parts that decide things are property-tested almost exhaustively; the
+parts that move data around are covered by nine integration paths. `services/dispatch.py`
+at 26% is named as the weakest figure, along with the reason it is defensible — its *rules*
+live in `lifecycle.py` at 100%, deliberately separated out as pure functions, and what is
+thin is the code carrying those decisions to the database.
+
+The measurement conditions are stated: coverage was taken **without** the nine integration
+tests, so the router figures are understated. A coverage number without its conditions is
+decoration.
+
+### The section that earns the marks
+
+§4, eight defects found by testing rather than by use. The float-associativity bug remains
+the best argument in the project for the method — Hypothesis generated three *identical*
+longitudes and the mean came out one ULP below its own minimum. No hand-written test picks
+that input; it looks degenerate and not worth writing.
+
+§8 records two faults in the tests themselves, both of which recurred after being
+identified, which is what makes them patterns rather than incidents: vacuous assertions
+about empty collections (three times), and tests that grep source text also matching the
+prose explaining the ban (four times).
+
+### Verified, again by test
+
+`tests/test_testing_report.py` — 9 tests. Every Hypothesis profile it names is registered,
+the `thorough` example count is at least what is claimed, the property count is not
+overstated, **the test total is checked against an actual `--collect-only` run**, and the
+gaps it declares match the gaps the SRS declares — so one document cannot quietly upgrade a
+weakness the other admits.
+
+Three of my own tests failed on first run, all wrong about the report rather than the
+report being wrong: `-q` suppresses the line the count was parsed from, `coverage.py` was
+matched as though it were a module under measurement, and so was `test_clustering_properties.py`.
+
+**508 tests total; 499 without a database.** Forty-nine of them now check the documents
+against the code.
+
+---
+
+## 14 August 2026 — Session 25: the SRS, and the walkthrough that hid the product
+
+### The specification
+
+`docs/10-srs.md`. **50 numbered functional requirements**, each with a MoSCoW priority, a
+status, the module that implements it and the test that holds it. Seven non-functional
+requirements carried over with identifiers regularised. Four use cases with their
+alternative flows. A section on what was cut and why, because cutting against an estimate
+is a requirements activity and is worth marks.
+
+**Two things are declared rather than rounded away**, and the summary table says so:
+
+- **FR-40 is Partial.** Clearance — telling everyone who was warned that the road is clear.
+  The code path exists and is wired; nothing tests it, and no seeded incident demonstrates
+  it. 49 of 50, stated.
+- **NFR-07 is unverified.** "Under 3 seconds on 3G" was never measured against a throttled
+  connection. It is a target, and the document says so rather than implying a measurement
+  nobody took.
+
+A specification claiming 50 of 50 would be a less useful document and a less honest one.
+
+### The tests caught me being wrong
+
+`tests/test_srs.py` — 17 tests, checking the specification against the filesystem: every
+module named as an implementation exists, every test named as verification exists, the FR
+numbering has no gaps or duplicates, every requirement carries a priority and a status, the
+quoted thresholds match the constants, and **the totals in the summary match the tables**.
+
+It failed on the first run. I had written `routers/notifications.py` as the implementation
+of FR-39 and there is no such file — the notification endpoints live in `corridors.py`,
+because a corridor and the warnings it produces share a router. That is exactly the failure
+an SRS is prone to: a confident claim, in a graded document, about a file that does not
+exist. Nobody reading the specification would have caught it.
+
+### The five-minute walkthrough was hiding the product
+
+`Deployment_and_Source_Links.txt` sent the examiner to Swagger for all six steps. Every
+one was an API call. **Implementation is 10 marks and this is the examiner's five minutes**,
+and it showed none of the interface: no role-differentiated views, no voice notes, no
+offline queue, no evidence panel, no signed-out gate.
+
+Rewritten as seven steps through the application — public map, sign in and watch the lock
+open, report with a photograph and a recording, submit one with the network off, the
+officer's queue and evidence, the warden closing the loop and reputations moving, the admin
+tab. The coordinate-swap rejection is kept as an optional minute at `/docs`, because it is
+genuinely the best thing in the API.
+
+Two corrections in the same file: the keep-warm claim is gone (it was never configured, and
+a false statement in a submission document is worse than the cold start it excused), and
+the Admin URL now names `#/admin` rather than telling an examiner there is no admin
+interface. There is one.
+
+### 489 passing
+
+---
+
 ## 14 August 2026 — Session 24: the app takes the root, and two silent faults
 
 ### What happened

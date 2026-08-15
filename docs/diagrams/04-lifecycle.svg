@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 400" width="780" height="400" font-family="Segoe UI,system-ui,sans-serif">
+  <style>
+    .zone{fill:#F7FAF8;stroke:#E4EAE6;stroke-width:1;stroke-dasharray:5 4}
+    .zl{font-size:10px;fill:#6B7B74;letter-spacing:.07em;font-weight:600}
+    .s{stroke-width:1.8;rx:20}
+    .grey{fill:#F1F5F2;stroke:#8A968F}
+    .amb{fill:#FBF0DC;stroke:#D9A406}
+    .red{fill:#FCECEA;stroke:#C2453D}
+    .blu{fill:#E6F1FB;stroke:#185FA5}
+    .grn{fill:#E1F5EE;stroke:#0F6E56}
+    .sn{font-size:12px;font-weight:600;text-anchor:middle;fill:#0F1D18}
+    .a{stroke:#6B7B74;stroke-width:1.4;fill:none;marker-end:url(#h)}
+    .al{font-size:9px;fill:#3A4844}
+    .note{font-size:9.5px;fill:#0F6E56;font-style:italic}
+  </style>
+  <defs><marker id="h" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#6B7B74"/></marker></defs>
+
+  <rect class="zone" x="20" y="52" width="470" height="130" rx="8"/>
+  <text class="zl" x="32" y="72">COMPUTED FROM CONFIDENCE — NOBODY SETS THESE</text>
+
+  <rect class="zone" x="510" y="52" width="250" height="130" rx="8"/>
+  <text class="zl" x="522" y="72">DECIDED BY A PERSON</text>
+
+  <circle cx="46" cy="126" r="7" fill="#0F1D18"/>
+  <text class="al" x="26" y="150">first report</text>
+
+  <rect class="s grey" x="76" y="102" width="112" height="46"/>
+  <text class="sn" x="132" y="130">reported</text>
+
+  <rect class="s amb" x="222" y="102" width="132" height="46"/>
+  <text class="sn" x="288" y="130">corroborated</text>
+
+  <rect class="s red" x="388" y="102" width="94" height="46"/>
+  <text class="sn" x="435" y="130">verified</text>
+
+  <rect class="s blu" x="536" y="102" width="96" height="46"/>
+  <text class="sn" x="584" y="130">assigned</text>
+
+  <rect class="s grn" x="660" y="102" width="94" height="46"/>
+  <text class="sn" x="707" y="130">resolved</text>
+  <circle cx="707" cy="196" r="7" fill="none" stroke="#0F1D18" stroke-width="2"/>
+  <circle cx="707" cy="196" r="3.5" fill="#0F1D18"/>
+
+  <path class="a" d="M53 126 L74 126"/>
+  <path class="a" d="M188 117 L220 117"/><text class="al" x="192" y="110">score ≥ 0.35</text>
+  <path class="a" d="M220 138 L190 138"/><text class="al" x="192" y="154">decays</text>
+  <path class="a" d="M354 117 L386 117"/><text class="al" x="356" y="110">≥ 0.70</text>
+  <path class="a" d="M386 138 L356 138"/><text class="al" x="358" y="154">decays</text>
+  <path class="a" d="M482 117 L534 117"/><text class="al" x="486" y="110">assign · officer</text>
+  <path class="a" d="M534 138 L484 138"/><text class="al" x="486" y="154">unassign</text>
+  <path class="a" d="M632 125 L658 125"/><text class="al" x="628" y="96">resolve · warden</text>
+  <path class="a" d="M707 148 L707 189"/>
+
+  <path class="a" d="M110 148 L110 210 L44 210"/>
+  <text class="al" x="118" y="214">decays below 0.05 — fades off the map, nobody closes it</text>
+
+  <text class="note" x="20" y="262">An incident can only be assigned from verified. An officer should not be dispatching a warden to something the system does not yet believe —</text>
+  <text class="note" x="20" y="278">if it matters and the score is low, the answer is more corroboration, not a lower bar.</text>
+  <text class="note" x="20" y="302">An incident can only be resolved from assigned. It cannot be closed by someone who never sent anyone to look, or the queue could be</text>
+  <text class="note" x="20" y="318">cleared by wishful thinking.</text>
+  <text class="note" x="20" y="342">Both are policy, not validation. The whole machine is the RULES table in lifecycle.py; anything not listed there is impossible, and the API</text>
+  <text class="note" x="20" y="358">returns allowed_actions so a button that would be refused is never drawn.</text>
+  <text class="note" x="20" y="382" fill="#6B7B74">Computed states move in both directions as reports arrive and decay. Decided states do not — a warden already sent does not un-send because confidence dipped.</text>
+</svg>
