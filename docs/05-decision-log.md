@@ -9,6 +9,29 @@ Format: what was decided, what else was considered, why, and what it costs.
 
 ---
 
+## 24 August 2026 — Render cold-start reseed
+
+### D-046 — Render reseeds demonstration data before starting the app
+
+**Decided:** The Render `startCommand` runs `python -m scripts.seed_demo --reset` before
+starting Uvicorn.
+
+**Considered:** relying on a keep-warm ping; asking the user to call `POST /admin/seed`
+before every demonstration; moving the seed into FastAPI startup; and leaving stale data
+as-is.
+
+**Why:** Render free services can sleep, and the first request after sleep is exactly the
+moment an examiner or marker is likely to judge the deployment. Seeded confidence decays
+with a 45-minute half-life, so an app that wakes successfully can still look empty. Running
+the existing seed script on cold start refreshes timestamps, recreates the demo accounts,
+and drains the outbox through the same projection path as real reports.
+
+**Costs:** startup is slower and every cold start deletes anything filed through the demo
+accounts. This is acceptable for an examination artifact and unacceptable for real users;
+it reinforces TD-17, TD-18 and TD-23 rather than resolving them.
+
+---
+
 ## 14 August 2026 — retiring the first interface
 
 ### D-045 — The application takes the root; the original page is retired
