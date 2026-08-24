@@ -3,6 +3,11 @@
  * The registration form has no role field, and that is not an oversight — it mirrors the
  * API, where `RegisterRequest` has no role field either. Self-registration always
  * produces a commuter. Wardens, officers and admins are created by an admin.
+ * 
+ *  // <p class="hint" style="margin-top:16px;line-height:1.6">
+ *  //   Demonstration accounts, password <code>NkwantaDemo2026</code>:<br>
+ *  //   <code>commuter@</code>, <code>warden@</code>, <code>officer@</code>, <code>admin@nkwanta.demo</code>
+ *  // </p>
  */
 
 import { api, auth } from "../api.js";
@@ -48,10 +53,7 @@ export default function authView(mount, { start = "login" } = {}) {
           <button class="btn btn--block" id="submit" style="margin-top:18px" disabled>Sign in</button>
         </form>
 
-        // <p class="hint" style="margin-top:16px;line-height:1.6">
-        //   Demonstration accounts, password <code>NkwantaDemo2026</code>:<br>
-        //   <code>commuter@</code>, <code>warden@</code>, <code>officer@</code>, <code>admin@nkwanta.demo</code>
-        // </p>
+
         <p class="hint" id="roleNote" style="display:none">
           New accounts are always commuters. Warden and officer accounts are created by an
           administrator — nobody registers themselves as police.
