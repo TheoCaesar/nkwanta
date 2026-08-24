@@ -9,6 +9,21 @@ what comes next.
 
 ---
 
+## 24 August 2026 — Session 29: Render cold-start reseed
+
+`render.yaml` now runs `python -m scripts.seed_demo --reset` before Uvicorn in the Render
+`startCommand`. On a free-tier cold start, the application should wake with fresh
+demonstration data instead of an empty-looking map caused by decayed confidence scores.
+
+The choice is recorded as **D-046** and as **TD-24**, because this is correct for an
+examination demo and wrong for real users: anything filed through a demo account is deleted
+on the next cold start, and startup waits for the seed and projection pass.
+
+What remains: deploy the changed blueprint/start command on Render and confirm the first
+request after a manual service restart shows incidents on the map.
+
+---
+
 ## 15 August 2026 — Session 28: the consolidated document, and four diagrams
 
 `docs/14-project-documentation.md` — all nineteen required sections. **Every document

@@ -22,7 +22,7 @@
        noticing why. Pure grey next to a green accent reads as browser default. */
     --ink:#0F1D18; --body:#3A4844; --muted:#6B7B74; --faint:#9AA8A1;
     --line:#E4EAE6; --hair:#EDF1EE; --grey-100:#F1F5F2;
-    --canvas:#F7FAF8; --card:#fff; --raised:#fff;
+    --canvas:#e4f7ea; --card:#fff; --raised:#fff;
 
     /* Spacing: one scale, nothing between steps. */
     --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px;

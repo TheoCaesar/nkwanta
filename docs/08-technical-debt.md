@@ -53,6 +53,7 @@ urgent than debt that merely sits there.
 | TD-21 | Gateway can be deliberately broken on the live deployment | **C** | Low now, critical before real use | C |
 | TD-22 | Stored confidence decays only when the sweep runs | A | Low | C |
 | TD-23 | Demo reset deletes everything a demo account filed, not just seeded rows | A | Low | D |
+| TD-24 | Render cold starts automatically reset demonstration data | A | Low for exam, critical before real use | D-046 |
 
 Items added during B02 onward are appended in build order.
 
@@ -617,6 +618,34 @@ link, waits, and concludes the application is broken.
 **Mitigation.** A keep-warm ping every 10 minutes against `/health`, which deliberately
 does not touch the database so it costs no Neon compute. Plus an explicit note to the
 examiner, because a ping can lapse and a sentence cannot.
+
+**Later mitigation for stale demo data.** D-046 makes the Render `startCommand` run
+`python -m scripts.seed_demo --reset` before Uvicorn. That does not remove the cold-start
+delay, but it means the app wakes with fresh demonstration data rather than a map whose
+confidence scores faded hours ago.
+
+---
+
+## TD-24 — Render cold starts automatically reset demonstration data
+
+**Debt.** The Render service resets and rebuilds the demonstration data every time the
+application process starts.
+
+**Cause.** The free service sleeps, and confidence decay means old seed data disappears
+from the useful map even when the application itself wakes correctly. The demonstration
+must survive an examiner opening the link after idle time.
+
+**Impact.** Anything filed through a demo account is deleted on the next cold start. The
+first request after sleep also waits for seeding and projection before Uvicorn starts, so
+wake-up is slower. This is deliberate for a grading artifact and wrong for production.
+
+**Priority.** Low for the examination deployment, critical before real use.
+
+**Class.** A — acceptable only because the deployed site is a demonstration environment.
+
+**Proposed resolution.** Remove the seed command from `render.yaml`, separate demo and
+production databases, and replace seeded data with explicit fixtures loaded only in a
+dedicated demo environment.
 
 ---
 

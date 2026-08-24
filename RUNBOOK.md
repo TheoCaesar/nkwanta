@@ -231,6 +231,12 @@ Belt and braces. The ping can lapse; the sentence cannot.
 minutes, so data seeded yesterday is invisible today — the map would look empty and an
 examiner would reasonably conclude the system does not work.
 
+On Render this is now automatic. The blueprint runs
+`python -m scripts.seed_demo --reset` in the service `startCommand` before Uvicorn starts,
+so every cold start after the free service wakes refreshes the demonstration data with
+current timestamps. This is for the examination deployment only: it deliberately resets
+anything filed through the demo accounts.
+
 ### Locally
 
 ```bash
@@ -243,6 +249,9 @@ produced. Safe to run repeatedly — identifiers are deterministic, so it update
 than duplicates.
 
 ### On the live deployment
+
+The live deployment refreshes itself on cold start. Use the endpoint below only when you
+want to refresh the data without restarting the Render service.
 
 > **Run the local script first, at least once.** `POST /admin/seed` requires an admin
 > login, and the admin account is created *by* the seed — so on a fresh database the
